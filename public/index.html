@@ -178,21 +178,24 @@
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 16px;
-      padding-bottom: calc(20px + env(safe-area-inset-bottom, 8px));
+      width: 100%;
+      padding: 12px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 8px));
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 10px;
       z-index: 10;
+      box-sizing: border-box;
     }
 
     /* Circle buttons */
     .circle-btn {
-      width: 56px;
-      height: 56px;
-      min-width: 56px;
-      min-height: 56px;
+      width: 50px;
+      height: 50px;
+      min-width: 50px;
+      min-height: 50px;
+      flex-shrink: 0;
       border-radius: 50%;
       border: none;
       background: var(--glass);
@@ -256,7 +259,7 @@
     /* Center input bar */
     #input-bar {
       flex: 1;
-      max-width: 320px;
+      min-width: 0;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -265,15 +268,16 @@
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--glass-border);
       box-shadow: 0 4px 20px var(--glass-shadow);
-      border-radius: 28px;
-      padding: 8px 12px;
-      min-height: 56px;
+      border-radius: 25px;
+      padding: 6px 10px;
+      min-height: 50px;
     }
 
     #upload-btn {
-      width: 36px;
-      height: 36px;
-      min-width: 36px;
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      flex-shrink: 0;
       border-radius: 50%;
       border: none;
       background: rgba(0, 0, 0, 0.05);
@@ -287,8 +291,8 @@
     #upload-btn:active { transform: scale(0.9); }
 
     #upload-btn svg {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       stroke: var(--text-secondary);
       stroke-width: 2;
       fill: none;
@@ -303,7 +307,7 @@
       color: var(--text);
       font-size: 16px;
       outline: none;
-      padding: 8px 4px;
+      padding: 6px 4px;
       font-family: inherit;
       min-width: 0;
     }
@@ -311,9 +315,10 @@
     #text-input::placeholder { color: var(--text-tertiary); }
 
     #send-btn {
-      width: 36px;
-      height: 36px;
-      min-width: 36px;
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      flex-shrink: 0;
       border-radius: 50%;
       border: none;
       background: var(--accent);
@@ -333,12 +338,12 @@
     }
 
     #send-btn svg {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       stroke: white;
       stroke-width: 2.5;
       fill: none;
-      margin-left: 2px;
+      margin-left: 1px;
     }
 
     #status {
