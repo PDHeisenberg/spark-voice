@@ -460,6 +460,23 @@ async function playAudio(base64) {
 initSpeech();
 connect();
 
+// Detect keyboard open/close for mobile
+if (window.visualViewport) {
+  let initialHeight = window.visualViewport.height;
+  
+  window.visualViewport.addEventListener('resize', () => {
+    const currentHeight = window.visualViewport.height;
+    const diff = initialHeight - currentHeight;
+    
+    // Keyboard is likely open if viewport shrunk significantly
+    if (diff > 150) {
+      document.body.classList.add('keyboard-open');
+    } else {
+      document.body.classList.remove('keyboard-open');
+    }
+  });
+}
+
 // Shortcut buttons
 document.querySelectorAll('.shortcut').forEach(btn => {
   btn.addEventListener('click', () => {

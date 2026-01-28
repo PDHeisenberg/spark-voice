@@ -164,6 +164,25 @@
       justify-content: flex-start;
       padding: 0 20px;
       padding-bottom: 140px;
+      transition: transform 0.3s ease;
+    }
+
+    /* When keyboard is shown */
+    body.keyboard-open #welcome {
+      position: fixed;
+      bottom: 80px;
+      left: 0;
+      right: 0;
+      padding-bottom: 0;
+    }
+
+    body.keyboard-open #greeting {
+      display: none;
+    }
+
+    body.keyboard-open #shortcuts {
+      padding-bottom: 20px;
+      justify-content: center;
     }
 
     .shortcut {
