@@ -20,9 +20,9 @@ const config = loadConfig();
 
 // Models for different modes
 const MODELS = {
-  voice: 'claude-3-5-haiku-20241022',  // Fast
-  chat: 'claude-sonnet-4-20250514',      // Deep thinking
-  notes: 'claude-sonnet-4-20250514'      // For summarization
+  voice: 'gemini-2.0-flash',              // Fast conversational
+  chat: 'claude-opus-4-5-20250514',       // Deep thinking (Opus 4.5)
+  notes: 'claude-opus-4-5-20250514'       // Summary (Opus 4.5)
 };
 
 // Gateway connection
@@ -201,20 +201,30 @@ async function chat(history, model, mode) {
     ...history.slice(-10)
   ];
 
+  // Build request body
+  const body = {
+    model,
+    messages,
+    max_tokens: mode === 'voice' ? 150 : 4000,
+  };
+  
+  // Enable extended thinking for chat mode (Opus 4.5)
+  if (mode === 'chat') {
+    body.thinking = { type: 'enabled', budget_tokens: 2000 };
+  }
+
   const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${GATEWAY_TOKEN}`,
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: mode === 'voice' ? 150 : 2000,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
+    const err = await response.text();
+    console.error('API error:', err);
     throw new Error(`API error: ${response.status}`);
   }
 
