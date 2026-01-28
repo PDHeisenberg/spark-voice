@@ -17,6 +17,8 @@ const notesBtn = document.getElementById('notes-btn');
 const statusEl = document.getElementById('status');
 const timerEl = document.getElementById('timer');
 const toastEl = document.getElementById('toast');
+const uploadBtn = document.getElementById('upload-btn');
+const fileInput = document.getElementById('file-input');
 
 // State
 let ws = null;
@@ -454,3 +456,45 @@ document.querySelectorAll('.shortcut').forEach(btn => {
     if (msg) send(msg, 'chat');
   });
 });
+
+// File upload
+uploadBtn?.addEventListener('click', () => fileInput?.click());
+fileInput?.addEventListener('change', handleFileUpload);
+
+async function handleFileUpload(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+
+  for (const file of files) {
+    try {
+      if (file.type.startsWith('image/')) {
+        const dataUrl = await readAsDataURL(file);
+        send(`[Attached image: ${file.name}]`, 'chat');
+      } else {
+        const text = await readAsText(file);
+        send(`[File: ${file.name}]\n${text.slice(0, 2000)}${text.length > 2000 ? '...' : ''}`, 'chat');
+      }
+    } catch (err) {
+      toast('Failed to read file', true);
+    }
+  }
+  fileInput.value = '';
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function readAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}

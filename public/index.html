@@ -265,43 +265,38 @@
       border-color: rgba(255, 255, 255, 0.25);
     }
 
-    /* Floating nav pill */
+    /* Floating nav - three separate bars */
     #bottom {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 16px 20px;
+      padding: 16px 16px;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 8px));
       display: flex;
+      align-items: center;
       justify-content: center;
+      gap: 10px;
       z-index: 10;
     }
 
-    #nav-pill {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .nav-pill {
       background: linear-gradient(135deg, 
-        rgba(255, 255, 255, 0.15) 0%, 
-        rgba(255, 255, 255, 0.08) 100%);
+        rgba(255, 255, 255, 0.12) 0%, 
+        rgba(255, 255, 255, 0.06) 100%);
       backdrop-filter: blur(40px) saturate(180%);
       -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border-radius: 32px;
-      padding: 8px;
-      border: 0.5px solid rgba(255, 255, 255, 0.2);
+      border: 0.5px solid rgba(255, 255, 255, 0.18);
       box-shadow: 
-        0 12px 40px rgba(0, 0, 0, 0.5),
-        0 4px 12px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
     }
 
     .nav-btn {
-      width: 52px;
-      height: 52px;
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
       border: none;
-      background: transparent;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -330,19 +325,17 @@
       z-index: 1;
     }
 
-    .nav-btn:active {
-      transform: scale(0.92);
-    }
+    .nav-btn:active { transform: scale(0.92); }
 
     .nav-btn.listening::before {
       background: var(--green);
-      box-shadow: 0 0 30px var(--green), 0 0 60px rgba(48, 209, 88, 0.4);
+      box-shadow: 0 0 30px var(--green), 0 0 50px rgba(48, 209, 88, 0.3);
     }
     .nav-btn.listening svg { stroke: #000; }
 
     .nav-btn.recording::before {
       background: var(--red);
-      box-shadow: 0 0 30px var(--red), 0 0 60px rgba(255, 69, 58, 0.4);
+      box-shadow: 0 0 30px var(--red), 0 0 50px rgba(255, 69, 58, 0.3);
       animation: pulse-glow 1.2s ease-in-out infinite;
     }
     .nav-btn.recording svg { stroke: #fff; }
@@ -352,17 +345,43 @@
       50% { transform: scale(1.08); }
     }
 
-    #input-wrap {
+    /* Center input bar */
+    #input-bar {
       flex: 1;
-      max-width: 280px;
+      max-width: 320px;
       display: flex;
       align-items: center;
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: 24px;
-      padding: 0 16px;
-      min-height: 48px;
-      border: 0.5px solid rgba(255, 255, 255, 0.1);
+      gap: 10px;
+      border-radius: 28px;
+      padding: 8px 12px;
+      min-height: 56px;
     }
+
+    #upload-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    #upload-btn:active { transform: scale(0.9); }
+
+    #upload-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--text-secondary);
+      stroke-width: 2;
+      fill: none;
+    }
+
+    #file-input { display: none; }
 
     #text-input {
       flex: 1;
@@ -371,15 +390,16 @@
       color: var(--text);
       font-size: 16px;
       outline: none;
-      padding: 12px 0;
+      padding: 8px 0;
       font-family: inherit;
+      min-width: 0;
     }
 
     #text-input::placeholder { color: var(--text-tertiary); }
 
     #send-btn {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       border: none;
       background: var(--accent);
@@ -387,7 +407,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-left: 8px;
+      flex-shrink: 0;
       opacity: 0;
       transform: scale(0.6);
       transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -487,31 +507,41 @@
     <div id="timer">0:00</div>
 
     <div id="bottom">
-      <div id="nav-pill">
-        <button id="voice-btn" class="nav-btn" title="Voice">
+      <!-- Voice button -->
+      <button id="voice-btn" class="nav-btn nav-pill" title="Voice">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
+          <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+        </svg>
+      </button>
+
+      <!-- Center input bar -->
+      <div id="input-bar" class="nav-pill">
+        <button id="upload-btn" title="Attach file">
           <svg viewBox="0 0 24 24">
-            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
-            <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
-
-        <div id="input-wrap">
-          <input type="text" id="text-input" placeholder="Message">
-          <button id="send-btn">
-            <svg viewBox="0 0 24 24">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-          </button>
-        </div>
-
-        <button id="notes-btn" class="nav-btn" title="Voice Note">
+        <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.json,.csv">
+        <input type="text" id="text-input" placeholder="Talk to me">
+        <button id="send-btn">
           <svg viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10"/>
-            <circle cx="12" cy="12" r="3"/>
+            <path d="M5 12h14M12 5l7 7-7 7"/>
           </svg>
         </button>
       </div>
+
+      <!-- Notes button -->
+      <button id="notes-btn" class="nav-btn nav-pill" title="Voice Note">
+        <svg viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 2v6h6"/>
+          <path d="M16 13H8"/>
+          <path d="M16 17H8"/>
+        </svg>
+      </button>
     </div>
   </div>
 
