@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Spark ⚡</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-tertiary: #1a1a25;
+      --accent: #ffd700;
+      --accent-glow: rgba(255, 215, 0, 0.3);
+      --text-primary: #ffffff;
+      --text-secondary: #888;
+      --success: #4CAF50;
+      --warning: #FFC107;
+      --error: #f44336;
+      --info: #2196F3;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+
+    /* Loading screen */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-primary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loader-icon {
+      font-size: 64px;
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { filter: drop-shadow(0 0 10px var(--accent)); transform: scale(1); }
+      50% { filter: drop-shadow(0 0 30px var(--accent)); transform: scale(1.1); }
+    }
+
+    .loader-text {
+      margin-top: 20px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    /* Main container */
+    #app {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 800px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Avatar section */
+    #avatar-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      position: relative;
+    }
+
+    #avatar-container {
+      width: 100%;
+      max-width: 500px;
+      aspect-ratio: 4/3;
+      background: radial-gradient(ellipse at center, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+
+    #avatar-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Waveform overlay (shows when speaking) */
+    #waveform {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      height: 40px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #waveform.active {
+      opacity: 1;
+    }
+
+    .wave-bar {
+      width: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: wave 0.5s ease-in-out infinite;
+    }
+
+    @keyframes wave {
+      0%, 100% { height: 8px; }
+      50% { height: 32px; }
+    }
+
+    /* Status bar */
+    #status-bar {
+      margin-top: 20px;
+      padding: 12px 24px;
+      background: var(--bg-tertiary);
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+    }
+
+    #status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--text-secondary);
+      transition: all 0.3s;
+    }
+
+    #status-indicator.listening {
+      background: var(--success);
+      box-shadow: 0 0 15px var(--success);
+    }
+
+    #status-indicator.thinking {
+      background: var(--warning);
+      box-shadow: 0 0 15px var(--warning);
+      animation: pulse 0.6s ease-in-out infinite;
+    }
+
+    #status-indicator.speaking {
+      background: var(--info);
+      box-shadow: 0 0 15px var(--info);
+    }
+
+    #status-indicator.error {
+      background: var(--error);
+      box-shadow: 0 0 15px var(--error);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    #status-text {
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    #latency {
+      font-size: 12px;
+      color: var(--text-secondary);
+      opacity: 0.7;
+    }
+
+    /* Transcript */
+    #transcript-container {
+      margin-top: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+      background: var(--bg-secondary);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .message {
+      padding: 10px 14px;
+      margin: 6px 0;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      background: var(--bg-tertiary);
+      margin-left: 40px;
+      text-align: right;
+    }
+
+    .message.assistant {
+      background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05));
+      border-left: 3px solid var(--accent);
+      margin-right: 40px;
+    }
+
+    .message.interim {
+      opacity: 0.5;
+      font-style: italic;
+    }
+
+    /* Controls */
+    #controls {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding-bottom: 20px;
+    }
+
+    button {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #start-btn {
+      background: linear-gradient(135deg, var(--accent), #ff8c00);
+      color: #000;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    #start-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 30px var(--accent-glow);
+    }
+
+    #start-btn:active {
+      transform: translateY(0);
+    }
+
+    .secondary-btn {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .secondary-btn:hover {
+      background: var(--bg-secondary);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .secondary-btn.active {
+      background: var(--error);
+      border-color: var(--error);
+    }
+
+    .hidden { display: none !important; }
+
+    /* Settings panel */
+    #settings {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+    }
+
+    #settings-btn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+
+    /* Mobile optimizations */
+    @media (max-width: 600px) {
+      #app { padding: 10px; }
+      #avatar-container { border-radius: 12px; }
+      #status-bar { padding: 10px 16px; }
+      .message { font-size: 13px; }
+      button { padding: 12px 20px; font-size: 14px; }
+    }
+
+    /* Debug panel (hidden by default) */
+    #debug {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading -->
+  <div id="loading">
+    <div class="loader-icon">⚡</div>
+    <div class="loader-text">Initializing Spark...</div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings">
+    <button id="settings-btn" class="secondary-btn" title="Settings">⚙️</button>
+  </div>
+
+  <!-- Main app -->
+  <div id="app">
+    <!-- Avatar -->
+    <div id="avatar-section">
+      <div id="avatar-container">
+        <canvas id="avatar-canvas"></canvas>
+        <div id="waveform">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+      
+      <div id="status-bar">
+        <div id="status-indicator"></div>
+        <span id="status-text">Click Start to begin</span>
+        <span id="latency"></span>
+      </div>
+    </div>
+
+    <!-- Transcript -->
+    <div id="transcript-container">
+      <div id="transcript"></div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controls">
+      <button id="start-btn">⚡ Start</button>
+      <button id="mute-btn" class="secondary-btn hidden">🎤 Mute</button>
+      <button id="clear-btn" class="secondary-btn hidden">🗑️</button>
+    </div>
+  </div>
+
+  <div id="debug"></div>
+
+  <!-- Three.js -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
