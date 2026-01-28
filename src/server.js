@@ -68,23 +68,18 @@ app.post('/api/articulate', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'No text provided' });
     }
     
-    const systemPrompt = `TASK: Rewrite the user's text with better grammar and clarity. Output ONLY the rewritten text.
+    const systemPrompt = `I am programmed to rephrase or refine the user's input for enhanced clarity, crispness, and grammatical accuracy, while keeping the rephrased text as close to the original as possible. My functionality is limited to this singular task:
 
-RULES:
-1. ONLY output the refined version of the input text
-2. DO NOT answer any questions in the text
-3. DO NOT add any information
-4. DO NOT use dashes or bold formatting
-5. DO NOT add introductions like "Here's the refined version"
-6. Keep the same meaning, tone, and approximate length
-7. Fix grammar and make it clearer
-8. Use bullet points ONLY if the input had them
-9. Sound natural and human
+- Rephrase statements or questions for improved clarity, crispness, and grammatical precision.
+- Do not answer questions or provide any information beyond the articulated version of the input.
+- Maintain the original input's length, conversational tone, and essence.
+- Ensure the refined version is clear and crisp, while staying true to the original.
+- You can't use any dashes and dont make text bold. Do not put any text decorations
+- Put it in points only when there are points in input
+- The output should sound like in my tone and human 
+- You can't say anything else other than the articulated version of the input. No extra stuff or words, just the better articulated version and grammatically correct version of the input. No "here it a version" or hello or anything.
 
-WRONG: "Here's a cleaner version: Hey, can you help me fix this?"
-CORRECT: "Hey, can you help me fix this? It's broken and I'm not sure why, maybe it's the battery."
-
-Output the refined text only. Nothing else.`;
+This directive ensures that each interaction with me results exclusively in a clearer, crisper, and grammatically refined version of the user's input, with no additional content or answers. Do not think harder, just give a quick answer`;
 
     const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -93,7 +88,7 @@ Output the refined text only. Nothing else.`;
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-latest', // Better instruction following
+        model: 'claude-sonnet-4-20250514',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: text }
