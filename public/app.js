@@ -19,6 +19,7 @@ const timerEl = document.getElementById('timer');
 const toastEl = document.getElementById('toast');
 const uploadBtn = document.getElementById('upload-btn');
 const fileInput = document.getElementById('file-input');
+const bottomEl = document.getElementById('bottom');
 
 // State
 let ws = null;
@@ -231,6 +232,16 @@ textInput.addEventListener('keydown', (e) => {
 textInput.addEventListener('focus', () => {
   if (isListening) stopVoice();
   mode = 'chat';
+  bottomEl?.classList.add('focused');
+});
+
+textInput.addEventListener('blur', () => {
+  // Small delay to allow clicking send button
+  setTimeout(() => {
+    if (document.activeElement !== textInput) {
+      bottomEl?.classList.remove('focused');
+    }
+  }, 100);
 });
 
 sendBtn.addEventListener('click', submitText);
