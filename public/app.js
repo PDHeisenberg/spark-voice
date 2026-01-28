@@ -41,10 +41,54 @@ function addMsg(text, type) {
   if (shortcutsEl) shortcutsEl.style.display = 'none';
   const el = document.createElement('div');
   el.className = `msg ${type}`;
-  el.textContent = text;
+  
+  if (type === 'bot') {
+    // Format bot messages with proper line breaks and basic markdown
+    el.innerHTML = formatMessage(text);
+  } else {
+    el.textContent = text;
+  }
+  
   messagesEl.appendChild(el);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return el;
+}
+
+function formatMessage(text) {
+  // Convert markdown-like formatting to HTML
+  return text
+    // Escape HTML
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Bold
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // Code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Line breaks - double newline = paragraph
+    .replace(/\n\n/g, '</p><p>')
+    // Single newline = br
+    .replace(/\n/g, '<br>')
+    // Wrap in paragraph
+    .replace(/^(.*)$/, '<p>$1</p>')
+    // Fix empty paragraphs
+    .replace(/<p><\/p>/g, '');
+}
+
+function showThinking() {
+  if (shortcutsEl) shortcutsEl.style.display = 'none';
+  removeThinking();
+  const el = document.createElement('div');
+  el.className = 'msg bot thinking';
+  el.id = 'thinking-indicator';
+  el.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeThinking() {
+  const el = document.getElementById('thinking-indicator');
+  if (el) el.remove();
 }
 
 let interimEl = null;
@@ -322,7 +366,7 @@ function send(text, sendMode) {
 
   isProcessing = true;
   addMsg(text, 'user');
-  setStatus('Thinking...');
+  showThinking();
 
   ws.send(JSON.stringify({ type: 'transcript', text, mode: sendMode }));
 }
@@ -334,6 +378,7 @@ function handle(data) {
       break;
 
     case 'text':
+      removeThinking();
       // Remove "Transcribing..." message if present
       const lastSys = messagesEl.querySelector('.msg.system:last-child');
       if (lastSys?.textContent === 'Transcribing...') lastSys.remove();
@@ -363,6 +408,7 @@ function handle(data) {
       break;
 
     case 'error':
+      removeThinking();
       toast(data.message || 'Error', true);
       isProcessing = false;
       setStatus('');
