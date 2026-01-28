@@ -9,34 +9,105 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     :root {
-      --bg: #000000;
-      --glass: rgba(255, 255, 255, 0.08);
-      --glass-border: rgba(255, 255, 255, 0.12);
-      --glass-highlight: rgba(255, 255, 255, 0.15);
+      --glass: rgba(255, 255, 255, 0.1);
+      --glass-border: rgba(255, 255, 255, 0.15);
       --accent: #0A84FF;
-      --accent-glow: rgba(10, 132, 255, 0.4);
+      --accent-glow: rgba(10, 132, 255, 0.5);
       --green: #30D158;
       --red: #FF453A;
-      --orange: #FF9F0A;
       --text: #ffffff;
       --text-secondary: rgba(255, 255, 255, 0.6);
-      --text-tertiary: rgba(255, 255, 255, 0.35);
+      --text-tertiary: rgba(255, 255, 255, 0.4);
     }
 
     html, body { 
       height: 100%; 
       overflow: hidden;
-      background: var(--bg);
+      background: #000;
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
+    /* Animated background */
+    #bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.5;
+      animation: float 20s ease-in-out infinite;
+    }
+
+    .orb-1 {
+      width: 400px;
+      height: 400px;
+      background: linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%);
+      top: -100px;
+      left: -100px;
+      animation-delay: 0s;
+    }
+
+    .orb-2 {
+      width: 350px;
+      height: 350px;
+      background: linear-gradient(135deg, #30D158 0%, #00C7BE 100%);
+      bottom: 20%;
+      right: -80px;
+      animation-delay: -5s;
+      animation-duration: 25s;
+    }
+
+    .orb-3 {
+      width: 300px;
+      height: 300px;
+      background: linear-gradient(135deg, #BF5AF2 0%, #FF375F 100%);
+      bottom: -50px;
+      left: 20%;
+      animation-delay: -10s;
+      animation-duration: 22s;
+    }
+
+    .orb-4 {
+      width: 250px;
+      height: 250px;
+      background: linear-gradient(135deg, #FF9F0A 0%, #FF375F 100%);
+      top: 30%;
+      right: 10%;
+      animation-delay: -15s;
+      animation-duration: 28s;
+      opacity: 0.3;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(30px, -30px) scale(1.05); }
+      50% { transform: translate(-20px, 20px) scale(0.95); }
+      75% { transform: translate(20px, 30px) scale(1.02); }
+    }
+
+    /* Noise overlay for texture */
+    #bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      pointer-events: none;
+    }
+
     #app {
+      position: relative;
+      z-index: 1;
       display: flex;
       flex-direction: column;
       height: 100%;
-      background: linear-gradient(180deg, #0a0a0a 0%, #000 50%, #050510 100%);
     }
 
     /* Messages */
@@ -44,7 +115,7 @@
       flex: 1;
       overflow-y: auto;
       padding: 24px 16px;
-      padding-bottom: 140px;
+      padding-bottom: 120px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -56,26 +127,26 @@
       border-radius: 22px;
       font-size: 16px;
       line-height: 1.5;
-      animation: msgIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      animation: msgIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     @keyframes msgIn {
-      from { opacity: 0; transform: translateY(12px) scale(0.95); }
+      from { opacity: 0; transform: translateY(16px) scale(0.9); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     .msg.user {
       align-self: flex-end;
       background: var(--accent);
-      color: white;
+      box-shadow: 0 4px 20px var(--accent-glow);
     }
 
     .msg.bot {
       align-self: flex-start;
       background: var(--glass);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 0.5px solid var(--glass-border);
     }
 
     .msg.system {
@@ -83,12 +154,12 @@
       background: transparent;
       color: var(--text-tertiary);
       font-size: 13px;
-      padding: 8px 16px;
     }
 
     .msg.interim {
-      opacity: 0.6;
+      opacity: 0.5;
       background: var(--glass);
+      backdrop-filter: blur(20px);
     }
 
     #empty {
@@ -97,44 +168,42 @@
       align-items: center;
       justify-content: center;
       color: var(--text-tertiary);
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 400;
+      letter-spacing: 0.3px;
     }
 
-    /* Bottom Navigation - Liquid Glass */
+    /* Floating nav pill */
     #bottom {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 12px 20px;
-      padding-bottom: calc(12px + env(safe-area-inset-bottom, 8px));
-      background: linear-gradient(180deg, 
-        rgba(30, 30, 35, 0.7) 0%, 
-        rgba(20, 20, 25, 0.85) 100%);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border-top: 0.5px solid var(--glass-border);
+      padding: 16px 20px;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom, 8px));
+      display: flex;
+      justify-content: center;
+      z-index: 10;
     }
 
-    /* Glass pill container */
     #nav-pill {
       display: flex;
       align-items: center;
       gap: 8px;
       background: linear-gradient(135deg, 
-        rgba(255, 255, 255, 0.12) 0%, 
-        rgba(255, 255, 255, 0.06) 100%);
-      border-radius: 28px;
-      padding: 6px;
-      border: 0.5px solid var(--glass-border);
+        rgba(255, 255, 255, 0.15) 0%, 
+        rgba(255, 255, 255, 0.08) 100%);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border-radius: 32px;
+      padding: 8px;
+      border: 0.5px solid rgba(255, 255, 255, 0.2);
       box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+        0 12px 40px rgba(0, 0, 0, 0.5),
+        0 4px 12px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
     }
 
-    /* Nav buttons */
     .nav-btn {
       width: 52px;
       height: 52px;
@@ -145,7 +214,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       position: relative;
     }
 
@@ -155,54 +224,52 @@
       inset: 0;
       border-radius: 50%;
       background: transparent;
-      transition: all 0.25s;
+      transition: all 0.3s;
     }
 
     .nav-btn svg {
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       stroke: var(--text-secondary);
       stroke-width: 1.8;
       fill: none;
-      transition: all 0.25s;
+      transition: all 0.3s;
       position: relative;
       z-index: 1;
     }
 
-    .nav-btn.listening::before {
-      background: var(--green);
-      box-shadow: 0 0 20px var(--green), 0 0 40px rgba(48, 209, 88, 0.3);
+    .nav-btn:active {
+      transform: scale(0.92);
     }
 
-    .nav-btn.listening svg {
-      stroke: #000;
+    .nav-btn.listening::before {
+      background: var(--green);
+      box-shadow: 0 0 30px var(--green), 0 0 60px rgba(48, 209, 88, 0.4);
     }
+    .nav-btn.listening svg { stroke: #000; }
 
     .nav-btn.recording::before {
       background: var(--red);
-      box-shadow: 0 0 20px var(--red), 0 0 40px rgba(255, 69, 58, 0.3);
-      animation: pulse-glow 1.5s ease-in-out infinite;
+      box-shadow: 0 0 30px var(--red), 0 0 60px rgba(255, 69, 58, 0.4);
+      animation: pulse-glow 1.2s ease-in-out infinite;
     }
-
-    .nav-btn.recording svg {
-      stroke: #fff;
-    }
+    .nav-btn.recording svg { stroke: #fff; }
 
     @keyframes pulse-glow {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.05); opacity: 0.9; }
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
     }
 
-    /* Text input container */
     #input-wrap {
       flex: 1;
+      max-width: 280px;
       display: flex;
       align-items: center;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 22px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 24px;
       padding: 0 16px;
-      min-height: 44px;
-      border: 0.5px solid rgba(255, 255, 255, 0.08);
+      min-height: 48px;
+      border: 0.5px solid rgba(255, 255, 255, 0.1);
     }
 
     #text-input {
@@ -212,17 +279,15 @@
       color: var(--text);
       font-size: 16px;
       outline: none;
-      padding: 10px 0;
+      padding: 12px 0;
       font-family: inherit;
     }
 
-    #text-input::placeholder {
-      color: var(--text-tertiary);
-    }
+    #text-input::placeholder { color: var(--text-tertiary); }
 
     #send-btn {
-      width: 32px;
-      height: 32px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
       border: none;
       background: var(--accent);
@@ -232,9 +297,9 @@
       justify-content: center;
       margin-left: 8px;
       opacity: 0;
-      transform: scale(0.7);
-      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-      box-shadow: 0 2px 12px var(--accent-glow);
+      transform: scale(0.6);
+      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 16px var(--accent-glow);
     }
 
     #send-btn.show {
@@ -243,49 +308,46 @@
     }
 
     #send-btn svg {
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
       stroke: white;
       stroke-width: 2.5;
       fill: none;
-      margin-left: 1px;
+      margin-left: 2px;
     }
 
-    /* Status */
     #status {
-      text-align: center;
-      font-size: 12px;
+      position: fixed;
+      bottom: calc(100px + env(safe-area-inset-bottom, 8px));
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
       color: var(--text-tertiary);
-      margin-top: 10px;
-      min-height: 16px;
       font-weight: 500;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.3s;
     }
 
+    #status.show { opacity: 1; }
     #status.listening { color: var(--green); }
     #status.recording { color: var(--red); }
 
-    /* Timer */
     #timer {
       display: none;
-      position: absolute;
-      top: -40px;
+      position: fixed;
+      bottom: calc(100px + env(safe-area-inset-bottom, 8px));
       left: 50%;
       transform: translateX(-50%);
-      font-size: 15px;
+      font-size: 18px;
       font-weight: 600;
       color: var(--red);
       font-variant-numeric: tabular-nums;
-      background: var(--glass);
-      backdrop-filter: blur(20px);
-      padding: 6px 14px;
-      border-radius: 12px;
-      border: 0.5px solid var(--glass-border);
     }
 
     #timer.show { display: block; }
 
-    /* Toast */
     #toast {
       position: fixed;
       top: 60px;
@@ -294,7 +356,7 @@
       background: var(--glass);
       backdrop-filter: blur(30px);
       padding: 12px 24px;
-      border-radius: 14px;
+      border-radius: 16px;
       font-size: 14px;
       font-weight: 500;
       opacity: 0;
@@ -306,15 +368,24 @@
     #toast.show { opacity: 1; }
     #toast.error { background: rgba(255, 69, 58, 0.9); }
 
-    /* Scrollbar */
     #messages::-webkit-scrollbar { width: 0; }
   </style>
 </head>
 <body>
+  <div id="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
   <div id="app">
     <div id="messages">
       <div id="empty">Ask me anything</div>
     </div>
+
+    <div id="status"></div>
+    <div id="timer">0:00</div>
 
     <div id="bottom">
       <div id="nav-pill">
@@ -342,13 +413,10 @@
           </svg>
         </button>
       </div>
-
-      <div id="timer">0:00</div>
-      <div id="status"></div>
     </div>
   </div>
 
   <div id="toast"></div>
-  <script type="module" src="app.js?v=8"></script>
+  <script type="module" src="app.js?v=9"></script>
 </body>
 </html>
