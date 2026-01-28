@@ -9,97 +9,38 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     :root {
-      --glass: rgba(255, 255, 255, 0.1);
-      --glass-border: rgba(255, 255, 255, 0.15);
-      --accent: #0A84FF;
-      --accent-glow: rgba(10, 132, 255, 0.5);
-      --green: #30D158;
-      --red: #FF453A;
-      --text: #ffffff;
-      --text-secondary: rgba(255, 255, 255, 0.6);
-      --text-tertiary: rgba(255, 255, 255, 0.4);
+      --bg: #f5f5f7;
+      --dot-color: rgba(0, 0, 0, 0.08);
+      --glass: rgba(255, 255, 255, 0.85);
+      --glass-border: rgba(0, 0, 0, 0.08);
+      --glass-shadow: rgba(0, 0, 0, 0.1);
+      --accent: #007AFF;
+      --accent-glow: rgba(0, 122, 255, 0.3);
+      --green: #34C759;
+      --red: #FF3B30;
+      --text: #1c1c1e;
+      --text-secondary: rgba(0, 0, 0, 0.5);
+      --text-tertiary: rgba(0, 0, 0, 0.35);
+      --msg-user: #007AFF;
+      --msg-bot: rgba(0, 0, 0, 0.05);
     }
 
     html, body { 
       height: 100%; 
       overflow: hidden;
-      background: #000;
+      background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Animated background */
+    /* Dotted notepad background */
     #bg {
       position: fixed;
       inset: 0;
+      background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+      background-size: 20px 20px;
       z-index: 0;
-      overflow: hidden;
-    }
-
-    .orb {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(80px);
-      opacity: 0.5;
-      animation: float 20s ease-in-out infinite;
-    }
-
-    .orb-1 {
-      width: 400px;
-      height: 400px;
-      background: linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%);
-      top: -100px;
-      left: -100px;
-      animation-delay: 0s;
-    }
-
-    .orb-2 {
-      width: 350px;
-      height: 350px;
-      background: linear-gradient(135deg, #30D158 0%, #00C7BE 100%);
-      bottom: 20%;
-      right: -80px;
-      animation-delay: -5s;
-      animation-duration: 25s;
-    }
-
-    .orb-3 {
-      width: 300px;
-      height: 300px;
-      background: linear-gradient(135deg, #BF5AF2 0%, #FF375F 100%);
-      bottom: -50px;
-      left: 20%;
-      animation-delay: -10s;
-      animation-duration: 22s;
-    }
-
-    .orb-4 {
-      width: 250px;
-      height: 250px;
-      background: linear-gradient(135deg, #FF9F0A 0%, #FF375F 100%);
-      top: 30%;
-      right: 10%;
-      animation-delay: -15s;
-      animation-duration: 28s;
-      opacity: 0.3;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      25% { transform: translate(30px, -30px) scale(1.05); }
-      50% { transform: translate(-20px, 20px) scale(0.95); }
-      75% { transform: translate(20px, 30px) scale(1.02); }
-    }
-
-    /* Noise overlay for texture */
-    #bg::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-      opacity: 0.03;
-      pointer-events: none;
     }
 
     #app {
@@ -137,16 +78,28 @@
 
     .msg.user {
       align-self: flex-end;
-      background: var(--accent);
-      box-shadow: 0 4px 20px var(--accent-glow);
+      background: var(--msg-user);
+      color: white;
+      box-shadow: 0 4px 12px var(--accent-glow);
     }
 
     .msg.bot {
       align-self: flex-start;
       background: var(--glass);
-      backdrop-filter: blur(30px);
-      -webkit-backdrop-filter: blur(30px);
-      border: 0.5px solid var(--glass-border);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 2px 8px var(--glass-shadow);
+      white-space: pre-wrap;
+    }
+
+    .msg.bot p { margin-bottom: 12px; }
+    .msg.bot p:last-child { margin-bottom: 0; }
+    .msg.bot strong { font-weight: 600; }
+    .msg.bot code {
+      background: rgba(0, 0, 0, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', monospace;
+      font-size: 14px;
     }
 
     .msg.system {
@@ -159,7 +112,6 @@
     .msg.interim {
       opacity: 0.5;
       background: var(--glass);
-      backdrop-filter: blur(20px);
     }
 
     /* Thinking indicator */
@@ -167,12 +119,12 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 16px 22px;
+      padding: 18px 24px;
     }
 
     .thinking-dots {
       display: flex;
-      gap: 4px;
+      gap: 5px;
     }
 
     .thinking-dots span {
@@ -188,48 +140,8 @@
     .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
 
     @keyframes bounce {
-      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-      30% { transform: translateY(-6px); opacity: 1; }
-    }
-
-    /* Bot message formatting */
-    .msg.bot {
-      align-self: flex-start;
-      background: var(--glass);
-      backdrop-filter: blur(30px);
-      -webkit-backdrop-filter: blur(30px);
-      border: 0.5px solid var(--glass-border);
-      white-space: pre-wrap;
-    }
-
-    .msg.bot p {
-      margin-bottom: 12px;
-    }
-
-    .msg.bot p:last-child {
-      margin-bottom: 0;
-    }
-
-    .msg.bot ul, .msg.bot ol {
-      margin: 8px 0;
-      padding-left: 20px;
-    }
-
-    .msg.bot li {
-      margin-bottom: 6px;
-    }
-
-    .msg.bot strong {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .msg.bot code {
-      background: rgba(0, 0, 0, 0.3);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: 'SF Mono', monospace;
-      font-size: 14px;
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+      30% { transform: translateY(-8px); opacity: 1; }
     }
 
     /* Quick actions */
@@ -238,74 +150,66 @@
       flex-wrap: wrap;
       gap: 10px;
       justify-content: center;
-      padding: 40px 20px;
+      padding: 60px 20px;
       padding-bottom: 140px;
     }
 
     .shortcut {
       background: var(--glass);
-      backdrop-filter: blur(30px);
-      -webkit-backdrop-filter: blur(30px);
-      border: 0.5px solid var(--glass-border);
-      border-radius: 18px;
-      padding: 14px 20px;
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 2px 8px var(--glass-shadow);
+      border-radius: 16px;
+      padding: 12px 18px;
       color: var(--text);
       font-size: 15px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: all 0.2s;
     }
 
     .shortcut:active {
-      transform: scale(0.95);
+      transform: scale(0.96);
+      background: rgba(0, 0, 0, 0.05);
     }
 
-    .shortcut:hover {
-      background: rgba(255, 255, 255, 0.15);
-      border-color: rgba(255, 255, 255, 0.25);
-    }
-
-    /* Floating nav - three separate bars */
+    /* Bottom nav - three separate elements */
     #bottom {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 16px 16px;
+      padding: 16px;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 8px));
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
+      gap: 12px;
       z-index: 10;
     }
 
-    .nav-pill {
-      background: linear-gradient(135deg, 
-        rgba(255, 255, 255, 0.12) 0%, 
-        rgba(255, 255, 255, 0.06) 100%);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border: 0.5px solid rgba(255, 255, 255, 0.18);
-      box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-
-    .nav-btn {
+    /* Circle buttons */
+    .circle-btn {
       width: 56px;
       height: 56px;
+      min-width: 56px;
+      min-height: 56px;
       border-radius: 50%;
       border: none;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 4px 20px var(--glass-shadow);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       position: relative;
+      overflow: hidden;
     }
 
-    .nav-btn::before {
+    .circle-btn::before {
       content: '';
       position: absolute;
       inset: 0;
@@ -314,35 +218,39 @@
       transition: all 0.3s;
     }
 
-    .nav-btn svg {
+    .circle-btn svg {
       width: 24px;
       height: 24px;
       stroke: var(--text-secondary);
       stroke-width: 1.8;
       fill: none;
-      transition: all 0.3s;
       position: relative;
       z-index: 1;
+      transition: all 0.3s;
     }
 
-    .nav-btn:active { transform: scale(0.92); }
+    .circle-btn:active { transform: scale(0.92); }
 
-    .nav-btn.listening::before {
+    .circle-btn.listening::before {
       background: var(--green);
-      box-shadow: 0 0 30px var(--green), 0 0 50px rgba(48, 209, 88, 0.3);
     }
-    .nav-btn.listening svg { stroke: #000; }
+    .circle-btn.listening {
+      box-shadow: 0 4px 30px rgba(52, 199, 89, 0.4);
+    }
+    .circle-btn.listening svg { stroke: white; }
 
-    .nav-btn.recording::before {
+    .circle-btn.recording::before {
       background: var(--red);
-      box-shadow: 0 0 30px var(--red), 0 0 50px rgba(255, 69, 58, 0.3);
       animation: pulse-glow 1.2s ease-in-out infinite;
     }
-    .nav-btn.recording svg { stroke: #fff; }
+    .circle-btn.recording {
+      box-shadow: 0 4px 30px rgba(255, 59, 48, 0.4);
+    }
+    .circle-btn.recording svg { stroke: white; }
 
     @keyframes pulse-glow {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.08); }
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
     }
 
     /* Center input bar */
@@ -351,7 +259,12 @@
       max-width: 320px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 4px 20px var(--glass-shadow);
       border-radius: 28px;
       padding: 8px 12px;
       min-height: 56px;
@@ -360,14 +273,14 @@
     #upload-btn {
       width: 36px;
       height: 36px;
+      min-width: 36px;
       border-radius: 50%;
       border: none;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.05);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex-shrink: 0;
       transition: all 0.2s;
     }
 
@@ -390,7 +303,7 @@
       color: var(--text);
       font-size: 16px;
       outline: none;
-      padding: 8px 0;
+      padding: 8px 4px;
       font-family: inherit;
       min-width: 0;
     }
@@ -400,6 +313,7 @@
     #send-btn {
       width: 36px;
       height: 36px;
+      min-width: 36px;
       border-radius: 50%;
       border: none;
       background: var(--accent);
@@ -407,11 +321,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      flex-shrink: 0;
       opacity: 0;
       transform: scale(0.6);
       transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-      box-shadow: 0 4px 16px var(--accent-glow);
+      box-shadow: 0 4px 12px var(--accent-glow);
     }
 
     #send-btn.show {
@@ -430,14 +343,13 @@
 
     #status {
       position: fixed;
-      bottom: calc(100px + env(safe-area-inset-bottom, 8px));
+      bottom: calc(95px + env(safe-area-inset-bottom, 8px));
       left: 50%;
       transform: translateX(-50%);
       font-size: 13px;
       color: var(--text-tertiary);
       font-weight: 500;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+      letter-spacing: 0.3px;
       opacity: 0;
       transition: opacity 0.3s;
     }
@@ -449,7 +361,7 @@
     #timer {
       display: none;
       position: fixed;
-      bottom: calc(100px + env(safe-area-inset-bottom, 8px));
+      bottom: calc(95px + env(safe-area-inset-bottom, 8px));
       left: 50%;
       transform: translateX(-50%);
       font-size: 18px;
@@ -466,30 +378,26 @@
       left: 50%;
       transform: translateX(-50%);
       background: var(--glass);
-      backdrop-filter: blur(30px);
+      backdrop-filter: blur(20px);
       padding: 12px 24px;
-      border-radius: 16px;
+      border-radius: 14px;
       font-size: 14px;
       font-weight: 500;
       opacity: 0;
       transition: opacity 0.3s;
       z-index: 100;
-      border: 0.5px solid var(--glass-border);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 4px 20px var(--glass-shadow);
     }
 
     #toast.show { opacity: 1; }
-    #toast.error { background: rgba(255, 69, 58, 0.9); }
+    #toast.error { background: var(--red); color: white; border: none; }
 
     #messages::-webkit-scrollbar { width: 0; }
   </style>
 </head>
 <body>
-  <div id="bg">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <div class="orb orb-4"></div>
-  </div>
+  <div id="bg"></div>
 
   <div id="app">
     <div id="messages">
@@ -507,8 +415,8 @@
     <div id="timer">0:00</div>
 
     <div id="bottom">
-      <!-- Voice button -->
-      <button id="voice-btn" class="nav-btn nav-pill" title="Voice">
+      <!-- Voice button - circle -->
+      <button id="voice-btn" class="circle-btn" title="Voice">
         <svg viewBox="0 0 24 24">
           <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
           <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
@@ -517,7 +425,7 @@
       </button>
 
       <!-- Center input bar -->
-      <div id="input-bar" class="nav-pill">
+      <div id="input-bar">
         <button id="upload-btn" title="Attach file">
           <svg viewBox="0 0 24 24">
             <line x1="12" y1="5" x2="12" y2="19"/>
@@ -533,8 +441,8 @@
         </button>
       </div>
 
-      <!-- Notes button -->
-      <button id="notes-btn" class="nav-btn nav-pill" title="Voice Note">
+      <!-- Notes button - circle -->
+      <button id="notes-btn" class="circle-btn" title="Voice Note">
         <svg viewBox="0 0 24 24">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <path d="M14 2v6h6"/>
@@ -546,6 +454,6 @@
   </div>
 
   <div id="toast"></div>
-  <script type="module" src="app.js?v=9"></script>
+  <script type="module" src="app.js?v=10"></script>
 </body>
 </html>
