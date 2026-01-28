@@ -1,158 +1,127 @@
 /**
- * LLM Provider Abstraction
+ * LLM Provider - Routes to Clawdbot Gateway
  * 
- * Supported providers:
- * - anthropic: Claude models
- * - openai: GPT models
- * - groq: Fast inference
- * - local: Ollama, etc.
+ * Instead of calling Claude directly, we send messages to the Clawdbot
+ * gateway so Spark Voice shares context with the main assistant.
  */
+
+import { readFileSync, existsSync } from 'fs';
 
 export class LLMProvider {
   constructor(config) {
-    this.provider = config.provider || 'anthropic';
-    this.model = config.model || 'claude-sonnet-4-20250514';
-    this.maxTokens = config.maxTokens || 400;
-    this.apiKey = config.apiKey;
-    this.systemPrompt = config.systemPrompt;
     this.config = config;
     
-    if (!this.apiKey) {
-      throw new Error(`No API key for LLM provider: ${this.provider}`);
+    // Clawdbot gateway connection
+    this.gatewayUrl = config.gatewayUrl || 'http://localhost:18789';
+    this.gatewayToken = config.gatewayToken || this.loadGatewayToken();
+    
+    if (!this.gatewayToken) {
+      console.warn('⚠️  No gateway token found - will try without auth');
     }
   }
 
+  loadGatewayToken() {
+    // Load from clawdbot config
+    const configPath = '/home/heisenberg/.clawdbot/clawdbot.json';
+    if (existsSync(configPath)) {
+      try {
+        const config = JSON.parse(readFileSync(configPath, 'utf8'));
+        return config.gateway?.auth?.token;
+      } catch {}
+    }
+    return null;
+  }
+
   /**
-   * Chat with the LLM
-   * @param {Array} history - Conversation history [{role, content}]
+   * Send message to Clawdbot and get response
+   * @param {Array} history - Conversation history (we only send the last user message)
    * @returns {Promise<string>} - Assistant response
    */
   async chat(history) {
     const startTime = Date.now();
     
-    let response;
-    switch (this.provider) {
-      case 'anthropic':
-        response = await this.anthropicChat(history);
-        break;
-      case 'openai':
-        response = await this.openaiChat(history);
-        break;
-      case 'groq':
-        response = await this.groqChat(history);
-        break;
-      default:
-        throw new Error(`Unknown LLM provider: ${this.provider}`);
+    // Get the last user message
+    const lastUserMsg = history.filter(m => m.role === 'user').pop();
+    if (!lastUserMsg) {
+      return "I didn't catch that. Could you repeat?";
     }
+
+    const text = lastUserMsg.content;
     
-    console.log(`🧠 LLM (${this.provider}): ${Date.now() - startTime}ms`);
-    return response;
-  }
+    try {
+      // Use sessions_send style API to send to main session
+      const response = await fetch(`${this.gatewayUrl}/api/sessions/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.gatewayToken && { 'Authorization': `Bearer ${this.gatewayToken}` }),
+        },
+        body: JSON.stringify({
+          sessionKey: 'agent:main:voice',  // Dedicated voice session
+          message: `[Voice] ${text}`,
+          timeoutSeconds: 60,
+        }),
+      });
 
-  async anthropicChat(history) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: this.maxTokens,
-        system: this.systemPrompt,
-        messages: history.slice(-10), // Keep context manageable
-      }),
-    });
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Gateway error ${response.status}: ${error}`);
+      }
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${error}`);
+      const data = await response.json();
+      console.log(`🧠 Clawdbot response: ${Date.now() - startTime}ms`);
+      
+      // Extract text from response
+      if (data.reply) {
+        return data.reply;
+      } else if (data.content) {
+        // Handle different response formats
+        if (Array.isArray(data.content)) {
+          return data.content.map(c => c.text || '').join('');
+        }
+        return data.content;
+      }
+      
+      return data.message || data.text || "I processed that but don't have a response.";
+      
+    } catch (error) {
+      console.error('Gateway error:', error.message);
+      
+      // Fallback: try direct message endpoint
+      try {
+        return await this.fallbackChat(text);
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError.message);
+        return "Sorry, I'm having trouble connecting. Try again in a moment.";
+      }
     }
-
-    const data = await response.json();
-    return data.content[0].text;
-  }
-
-  async openaiChat(history) {
-    const messages = [
-      { role: 'system', content: this.systemPrompt },
-      ...history.slice(-10),
-    ];
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        max_tokens: this.maxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenAI API error ${response.status}: ${error}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
-  }
-
-  async groqChat(history) {
-    const messages = [
-      { role: 'system', content: this.systemPrompt },
-      ...history.slice(-10),
-    ];
-
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.model || 'mixtral-8x7b-32768',
-        messages,
-        max_tokens: this.maxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Groq API error ${response.status}: ${error}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
 
   /**
-   * Stream chat (for future real-time text display)
+   * Fallback: Use the chat completions endpoint
    */
-  async *streamChat(history) {
-    // TODO: Implement streaming for each provider
-    const response = await this.chat(history);
-    yield response;
+  async fallbackChat(text) {
+    const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.gatewayToken && { 'Authorization': `Bearer ${this.gatewayToken}` }),
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        messages: [
+          { role: 'system', content: 'You are Spark, responding via voice. Keep responses concise (under 100 words).' },
+          { role: 'user', content: text }
+        ],
+        max_tokens: 300,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Fallback error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "No response";
   }
 }
-
-// Model presets
-export const MODELS = {
-  anthropic: {
-    opus: 'claude-opus-4-20250514',
-    sonnet: 'claude-sonnet-4-20250514',
-    haiku: 'claude-3-5-haiku-20241022',
-  },
-  openai: {
-    gpt4: 'gpt-4-turbo-preview',
-    gpt35: 'gpt-3.5-turbo',
-  },
-  groq: {
-    mixtral: 'mixtral-8x7b-32768',
-    llama: 'llama2-70b-4096',
-  },
-};

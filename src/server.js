@@ -226,7 +226,7 @@ server.listen(PORT, () => {
 ║  Server running on http://localhost:${PORT}             ║
 ║                                                       ║
 ║  Providers:                                           ║
-║  • LLM: ${config.llm.model.padEnd(40)}║
+║  • LLM: ${'clawdbot-gateway'.padEnd(40)}║
 ║  • TTS: ${config.tts.provider.padEnd(40)}║
 ║  • Avatar: ${config.avatar.type.padEnd(37)}║
 ╚═══════════════════════════════════════════════════════╝

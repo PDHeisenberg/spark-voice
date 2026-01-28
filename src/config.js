@@ -9,6 +9,18 @@ import { config as dotenvConfig } from 'dotenv';
 // Load .env if present
 dotenvConfig();
 
+// Load gateway token from clawdbot config
+function loadGatewayToken() {
+  const configPath = '/home/heisenberg/.clawdbot/clawdbot.json';
+  if (existsSync(configPath)) {
+    try {
+      const config = JSON.parse(readFileSync(configPath, 'utf8'));
+      return config.gateway?.auth?.token;
+    } catch {}
+  }
+  return null;
+}
+
 // Helper to load key from clawdbot auth
 function loadAuthKey(provider) {
   // Try auth-profiles.json first (clawdbot standard)
@@ -39,11 +51,9 @@ export function loadConfig() {
     port: parseInt(process.env.PORT || '3456'),
     
     llm: {
-      provider: process.env.LLM_PROVIDER || 'anthropic',
-      model: process.env.AI_MODEL || 'claude-sonnet-4-20250514',
-      maxTokens: parseInt(process.env.AI_MAX_TOKENS || '400'),
-      apiKey: process.env.ANTHROPIC_API_KEY || loadAuthKey('anthropic'),
-      systemPrompt: process.env.SYSTEM_PROMPT || getDefaultSystemPrompt(),
+      provider: 'clawdbot',  // Route through Clawdbot gateway
+      gatewayUrl: process.env.GATEWAY_URL || 'http://localhost:18789',
+      gatewayToken: process.env.GATEWAY_TOKEN || loadGatewayToken(),
     },
     
     tts: {

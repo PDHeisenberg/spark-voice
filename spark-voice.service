@@ -1,0 +1,15 @@
+[Unit]
+Description=Spark Voice Server
+After=network.target
+
+[Service]
+Type=simple
+User=heisenberg
+WorkingDirectory=/home/heisenberg/clawd/spark-voice
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
