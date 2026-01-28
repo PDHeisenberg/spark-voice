@@ -861,6 +861,45 @@
       transform: scale(0.95);
     }
 
+    /* Hide history button when in chat feed */
+    #history-btn.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.8);
+    }
+
+    /* Close button (back to intro) */
+    #close-btn {
+      position: fixed;
+      bottom: calc(90px + env(safe-area-inset-bottom, 8px));
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 16px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 2px 12px var(--glass-shadow);
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      z-index: 9;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    #close-btn.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #close-btn:active {
+      transform: translateX(-50%) scale(0.95);
+    }
+
     /* History panel */
     #history-panel {
       display: none;
@@ -1022,11 +1061,11 @@
           <h1>Hi, Parth,<br>how can I help?</h1>
         </div>
         <div id="shortcuts">
-          <button class="shortcut" id="todays-reports-btn">📊 Today's Reports</button>
-          <button class="shortcut" id="articulations-btn">✍️ Articulations</button>
           <button class="shortcut" data-msg="Any updates for me?">Any updates for me?</button>
+          <button class="shortcut" data-msg="Reports for today">Reports for today</button>
           <button class="shortcut" data-msg="Check my portfolio">Check my portfolio</button>
           <button class="shortcut" data-msg="What's on my calendar?">What's on my calendar?</button>
+          <button class="shortcut" data-msg="Quick news briefing">Quick news briefing</button>
           <button class="shortcut" data-msg="Summarize my emails">Summarize my emails</button>
         </div>
       </div>
@@ -1056,6 +1095,7 @@
     <div id="timer">0:00</div>
 
     <button id="clear-chat-btn">Clear chat</button>
+    <button id="close-btn">Close</button>
 
     <div id="bottom">
       <!-- Voice button - circle -->
