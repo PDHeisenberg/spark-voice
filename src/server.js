@@ -250,23 +250,41 @@ async function transcribeAudio(audioBase64) {
   // Convert base64 to buffer
   const audioBuffer = Buffer.from(audioBase64, 'base64');
   
-  // Create form data
-  const formData = new FormData();
-  formData.append('file', new Blob([audioBuffer], { type: 'audio/webm' }), 'audio.webm');
-  formData.append('model', 'whisper-1');
-  formData.append('language', 'en');
+  // Build multipart form data manually
+  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+  
+  const formParts = [
+    `--${boundary}\r\n`,
+    `Content-Disposition: form-data; name="file"; filename="audio.webm"\r\n`,
+    `Content-Type: audio/webm\r\n\r\n`,
+  ];
+  
+  const formEnd = [
+    `\r\n--${boundary}\r\n`,
+    `Content-Disposition: form-data; name="model"\r\n\r\n`,
+    `whisper-1`,
+    `\r\n--${boundary}--\r\n`,
+  ];
+  
+  const formBody = Buffer.concat([
+    Buffer.from(formParts.join('')),
+    audioBuffer,
+    Buffer.from(formEnd.join(''))
+  ]);
   
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
     },
-    body: formData,
+    body: formBody,
   });
   
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Whisper error: ${err}`);
+    console.error('Whisper error:', err);
+    throw new Error(`Whisper error: ${response.status}`);
   }
   
   const data = await response.json();
