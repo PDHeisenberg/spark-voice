@@ -16,9 +16,8 @@ import * as THREE from 'three';
 // ============================================================================
 
 const CONFIG = {
-  wsUrl: window.location.hostname === 'localhost' 
-    ? `ws://${window.location.host}`
-    : `wss://${window.location.host}`,
+  // Backend on Tailscale - only accessible to your devices
+  wsUrl: 'wss://clawdbot.tail6f2982.ts.net',
   reconnectDelay: 2000,
   maxReconnectAttempts: 5,
   silenceThreshold: 1500, // ms of silence before sending
