@@ -251,6 +251,12 @@ app.get('/api/messages/all', async (req, res) => {
       // Determine session type from filename
       const isSparkSession = f.startsWith('spark_');
       
+      // First pass: check if this session has any WhatsApp messages
+      const hasWhatsApp = content.includes('[WhatsApp');
+      
+      // Skip sessions that are neither Spark nor WhatsApp
+      if (!isSparkSession && !hasWhatsApp) continue;
+      
       for (const line of lines) {
         try {
           const entry = JSON.parse(line);
@@ -262,11 +268,8 @@ app.get('/api/messages/all', async (req, res) => {
               let text = extractTextFromContent(msg.content);
               if (!text) continue;
               
-              // Check if this is a WhatsApp message
-              const isWhatsApp = text.includes('[WhatsApp');
-              
-              // Only include WhatsApp or Spark (web) sessions
-              if (!isWhatsApp && !isSparkSession) continue;
+              // Determine channel for this message
+              const isWhatsAppMsg = text.includes('[WhatsApp');
               
               // Skip heartbeats, cron, system messages
               if (excludePatterns.some(p => text.includes(p))) continue;
@@ -289,7 +292,7 @@ app.get('/api/messages/all', async (req, res) => {
               allMessages.push({
                 role: msg.role,
                 text,
-                channel: isWhatsApp ? 'whatsapp' : 'web',
+                channel: hasWhatsApp ? 'whatsapp' : 'web',
                 timestamp: typeof timestamp === 'string' ? Date.parse(timestamp) : timestamp
               });
             }
