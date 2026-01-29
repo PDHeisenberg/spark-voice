@@ -228,16 +228,28 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
   }
 });
 
-// Fetch ALL messages from ALL sessions - unified chat feed
+// Fetch ALL messages from ALL sessions - unified chat feed (Web + WhatsApp only)
 app.get('/api/messages/all', async (req, res) => {
   try {
     const allMessages = [];
     const files = readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.jsonl'));
     
+    // Patterns to exclude (heartbeats, cron, system)
+    const excludePatterns = [
+      'Read HEARTBEAT.md',
+      'HEARTBEAT_OK',
+      'Cron:',
+      '[Cron job',
+      'systemEvent',
+    ];
+    
     for (const f of files) {
       const filepath = join(SESSIONS_DIR, f);
       const content = readFileSync(filepath, 'utf8');
       const lines = content.trim().split('\n').filter(l => l);
+      
+      // Determine session type from filename
+      const isSparkSession = f.startsWith('spark_');
       
       for (const line of lines) {
         try {
@@ -249,6 +261,15 @@ app.get('/api/messages/all', async (req, res) => {
               // Extract text content
               let text = extractTextFromContent(msg.content);
               if (!text) continue;
+              
+              // Check if this is a WhatsApp message
+              const isWhatsApp = text.includes('[WhatsApp');
+              
+              // Only include WhatsApp or Spark (web) sessions
+              if (!isWhatsApp && !isSparkSession) continue;
+              
+              // Skip heartbeats, cron, system messages
+              if (excludePatterns.some(p => text.includes(p))) continue;
               
               // Clean up the text
               text = text
@@ -268,6 +289,7 @@ app.get('/api/messages/all', async (req, res) => {
               allMessages.push({
                 role: msg.role,
                 text,
+                channel: isWhatsApp ? 'whatsapp' : 'web',
                 timestamp: typeof timestamp === 'string' ? Date.parse(timestamp) : timestamp
               });
             }
