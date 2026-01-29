@@ -489,6 +489,102 @@ async function playAudio(base64) {
 }
 
 // ============================================================================
+// MESSAGE CONTEXT MENU (long-press)
+// ============================================================================
+
+const msgMenu = document.getElementById('msg-menu');
+const menuCopy = document.getElementById('menu-copy');
+const menuEdit = document.getElementById('menu-edit');
+const menuDelete = document.getElementById('menu-delete');
+
+let selectedMsg = null;
+let longPressTimer = null;
+
+function showMsgMenu(msgEl, x, y) {
+  selectedMsg = msgEl;
+  msgEl.classList.add('selected');
+  
+  // Position menu near the touch point
+  const menuWidth = 148; // 3 buttons * ~44px + padding
+  const menuHeight = 60;
+  
+  // Keep menu on screen
+  const finalX = Math.min(x, window.innerWidth - menuWidth - 10);
+  const finalY = Math.max(y - menuHeight - 10, 10);
+  
+  msgMenu.style.left = finalX + 'px';
+  msgMenu.style.top = finalY + 'px';
+  msgMenu.classList.add('show');
+}
+
+function hideMsgMenu() {
+  msgMenu?.classList.remove('show');
+  selectedMsg?.classList.remove('selected');
+  selectedMsg = null;
+}
+
+// Long-press detection on messages
+messagesEl?.addEventListener('touchstart', (e) => {
+  const msgEl = e.target.closest('.msg');
+  if (!msgEl || msgEl.classList.contains('system') || msgEl.classList.contains('thinking')) return;
+  
+  const touch = e.touches[0];
+  longPressTimer = setTimeout(() => {
+    e.preventDefault();
+    showMsgMenu(msgEl, touch.clientX, touch.clientY);
+  }, 500);
+}, { passive: false });
+
+messagesEl?.addEventListener('touchend', () => {
+  clearTimeout(longPressTimer);
+});
+
+messagesEl?.addEventListener('touchmove', () => {
+  clearTimeout(longPressTimer);
+});
+
+// Hide menu on tap elsewhere
+document.addEventListener('touchstart', (e) => {
+  if (!e.target.closest('#msg-menu') && !e.target.closest('.msg')) {
+    hideMsgMenu();
+  }
+});
+
+// Copy action
+menuCopy?.addEventListener('click', () => {
+  if (!selectedMsg) return;
+  const text = selectedMsg.textContent || selectedMsg.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Copied!');
+  }).catch(() => {
+    toast('Failed to copy', true);
+  });
+  hideMsgMenu();
+});
+
+// Edit action (puts text in input)
+menuEdit?.addEventListener('click', () => {
+  if (!selectedMsg) return;
+  const text = selectedMsg.textContent || selectedMsg.innerText;
+  if (textInput) {
+    textInput.value = text;
+    textInput.style.height = 'auto';
+    textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
+    sendBtn?.classList.add('show');
+    textInput.focus();
+  }
+  hideMsgMenu();
+});
+
+// Delete action
+menuDelete?.addEventListener('click', () => {
+  if (!selectedMsg) return;
+  selectedMsg.remove();
+  toast('Deleted');
+  hideMsgMenu();
+});
+
+// ============================================================================
 // INIT
 // ============================================================================
 
