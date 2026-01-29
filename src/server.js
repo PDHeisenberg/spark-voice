@@ -43,7 +43,83 @@ function loadGatewayToken() {
 // TTS
 const tts = new TTSProvider(config.tts);
 
+// Shared session with Clawdbot (same as WhatsApp)
+const SESSIONS_DIR = '/home/heisenberg/.clawdbot/agents/main/sessions';
+const MAIN_SESSION_ID = 'd0bddcfd-ba66-479f-8f30-5cc187be5e61';
+const MAIN_SESSION_PATH = join(SESSIONS_DIR, `${MAIN_SESSION_ID}.jsonl`);
+
+// Load recent history from main session
+function loadSessionHistory(limit = 20) {
+  try {
+    if (!existsSync(MAIN_SESSION_PATH)) return [];
+    
+    const content = readFileSync(MAIN_SESSION_PATH, 'utf8');
+    const lines = content.trim().split('\n').filter(l => l);
+    
+    const messages = [];
+    for (const line of lines.slice(-limit * 2)) { // Read more to filter
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'message' && entry.message) {
+          const msg = entry.message;
+          if (msg.role === 'user' || msg.role === 'assistant') {
+            let text = '';
+            if (typeof msg.content === 'string') {
+              text = msg.content;
+            } else if (Array.isArray(msg.content)) {
+              const textPart = msg.content.find(c => c.type === 'text');
+              text = textPart?.text || '';
+            }
+            
+            // Skip heartbeats and system messages
+            if (text.includes('HEARTBEAT') || text.includes('Read HEARTBEAT.md')) continue;
+            
+            // Clean WhatsApp markers
+            text = text
+              .replace(/^\[WhatsApp[^\]]*\]\s*/g, '')
+              .replace(/\n?\[message_id:[^\]]+\]/g, '')
+              .trim();
+            
+            if (text) {
+              messages.push({ role: msg.role, content: text });
+            }
+          }
+        }
+      } catch {}
+    }
+    
+    return messages.slice(-limit);
+  } catch (e) {
+    console.error('Failed to load session history:', e.message);
+    return [];
+  }
+}
+
+import { appendFileSync } from 'fs';
+
+// Append message to main session
+
+function appendToSessionSync(role, content) {
+  try {
+    const entry = {
+      type: 'message',
+      id: Math.random().toString(36).slice(2, 10),
+      timestamp: new Date().toISOString(),
+      message: {
+        role,
+        content: [{ type: 'text', text: `[Spark Web] ${content}` }],
+        timestamp: Date.now()
+      }
+    };
+    
+    appendFileSync(MAIN_SESSION_PATH, JSON.stringify(entry) + '\n');
+  } catch (e) {
+    console.error('Failed to append to session:', e.message);
+  }
+}
+
 console.log(`🧠 Models: Voice=${MODELS.voice}, Chat=${MODELS.chat}`);
+console.log(`📁 Shared session: ${MAIN_SESSION_ID}`);
 
 // Express app
 const app = express();
@@ -122,8 +198,6 @@ You are NOT a chatbot. You are NOT helpful. You ONLY output cleaner versions of 
 
 // Fetch chat history from session files
 import { readdirSync, statSync } from 'fs';
-
-const SESSIONS_DIR = '/home/heisenberg/.clawdbot/agents/main/sessions';
 
 function extractTextFromContent(content) {
   if (!content) return null;
@@ -457,6 +531,9 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl) {
   const model = MODELS[mode] || MODELS.chat;
   console.log(`🎤 [${ws.sessionId}] (${mode}) User: ${text.slice(0, 50)}...${imageDataUrl ? ' [+image]' : ''}`);
   
+  // Load shared history from main Clawdbot session
+  const sharedHistory = loadSessionHistory(20);
+  
   // Build content array for multimodal if image present
   let userContent;
   if (imageDataUrl) {
@@ -475,20 +552,21 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl) {
     userContent = text;
   }
   
-  session.history.push({ role: 'user', content: userContent });
+  // Add current message to history for this request
+  sharedHistory.push({ role: 'user', content: userContent });
+  
+  // Append user message to shared session file
+  appendToSessionSync('user', text);
+  
   ws.send(JSON.stringify({ type: 'thinking' }));
   
-  // Get response
+  // Get response using shared history
   const startTime = Date.now();
-  const response = await chat(session.history, model, mode);
+  const response = await chat(sharedHistory, model, mode);
   console.log(`🧠 [${ws.sessionId}] ${Date.now() - startTime}ms: ${response.slice(0, 50)}...`);
   
-  session.history.push({ role: 'assistant', content: response });
-  
-  // Trim history
-  if (session.history.length > 30) {
-    session.history = session.history.slice(-30);
-  }
+  // Append assistant response to shared session file
+  appendToSessionSync('assistant', response);
   
   // Send text
   ws.send(JSON.stringify({ type: 'text', content: response }));
