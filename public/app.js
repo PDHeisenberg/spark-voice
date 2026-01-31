@@ -3,7 +3,15 @@
  */
 
 const CONFIG = {
-  wsUrl: `wss://${location.host}`,
+  // Build WebSocket URL - include pathname for subpath routing (e.g., /voice)
+  wsUrl: (() => {
+    // Use wss:// for HTTPS, ws:// for HTTP
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const base = `${protocol}//${location.host}`;
+    // If we're on a subpath like /voice, include it
+    const path = location.pathname.replace(/\/+$/, ''); // remove trailing slashes
+    return path && path !== '/' ? `${base}${path}` : base;
+  })(),
   silenceMs: 1500,
 };
 
@@ -24,7 +32,7 @@ const voiceBar = document.getElementById('voice-bar');
 const closeVoiceBtn = document.getElementById('close-voice-btn');
 const waveformEl = document.getElementById('waveform');
 const voiceContent = document.getElementById('voice-content');
-const voiceTranscript = document.getElementById('voice-transcript');
+const voiceStatus = document.getElementById('voice-status');
 const notesContent = document.getElementById('notes-content');
 const notesTimerEl = document.getElementById('notes-timer');
 const notesBar = document.getElementById('notes-bar');
@@ -37,7 +45,7 @@ const historyBtn = document.getElementById('history-btn');
 let ws = null;
 let mode = 'chat';
 let pageState = 'intro'; // 'intro' or 'chatfeed'
-let recognition = null;
+// Realtime voice state is defined in the REALTIME VOICE MODE section
 let isListening = false;
 let isProcessing = false;
 let audioContext = null;
@@ -53,25 +61,43 @@ let mediaStream = null;
 // ============================================================================
 
 function showIntroPage() {
+  console.log('showIntroPage called');
   pageState = 'intro';
   // Show welcome
   if (welcomeEl) welcomeEl.style.display = '';
   // Clear messages (but keep welcome)
   messagesEl?.querySelectorAll('.msg').forEach(m => m.remove());
   // Show history button
-  historyBtn?.classList.remove('hidden');
-  // Hide close button
-  closeBtn?.classList.remove('show');
+  if (historyBtn) {
+    historyBtn.classList.remove('hidden');
+    historyBtn.style.opacity = '1';
+    historyBtn.style.pointerEvents = 'auto';
+  }
+  // Hide close button - force both class and inline style
+  if (closeBtn) {
+    closeBtn.classList.remove('show');
+    closeBtn.style.opacity = '0';
+    closeBtn.style.pointerEvents = 'none';
+  }
 }
 
 function showChatFeedPage() {
+  console.log('showChatFeedPage called');
   pageState = 'chatfeed';
   // Hide welcome
   if (welcomeEl) welcomeEl.style.display = 'none';
   // Hide history button
-  historyBtn?.classList.add('hidden');
-  // Show close button
-  closeBtn?.classList.add('show');
+  if (historyBtn) {
+    historyBtn.classList.add('hidden');
+    historyBtn.style.opacity = '0';
+    historyBtn.style.pointerEvents = 'none';
+  }
+  // Show close button - force both class and inline style
+  if (closeBtn) {
+    closeBtn.classList.add('show');
+    closeBtn.style.opacity = '1';
+    closeBtn.style.pointerEvents = 'auto';
+  }
 }
 
 // History button - load all messages and switch to chat feed
@@ -121,7 +147,10 @@ historyBtn?.addEventListener('click', async () => {
 });
 
 // Close button - go back to intro
-closeBtn?.addEventListener('click', () => {
+closeBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('Close button clicked');
   showIntroPage();
 });
 
@@ -179,7 +208,10 @@ function removeThinking() {
 }
 
 function setStatus(text) {
-  statusEl.textContent = text;
+  if (statusEl) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle('show', !!text);
+  }
 }
 
 function toast(msg, isError = false) {
@@ -191,80 +223,612 @@ function toast(msg, isError = false) {
 // ============================================================================
 // VOICE MODE
 // ============================================================================
+// REALTIME VOICE MODE (OpenAI Realtime API)
+// ============================================================================
 
-function initSpeech() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return false;
+let realtimeWs = null;
+let realtimeAudioContext = null;
+let realtimeMediaStream = null;
+let realtimeScriptProcessor = null;
+let realtimePlaybackContext = null;
+let audioQueue = [];
+let isPlaying = false;
 
-  recognition = new SR();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
+// Waiting/thinking sound state
+let thinkingAudio = null;
+let thinkingInterval = null;
 
-  let final = '';
-  let timer = null;
+// Create a simple, gentle thinking sound
+function createThinkingSound() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const sampleRate = ctx.sampleRate;
+  const duration = 0.3; // Short 300ms pulse
+  const samples = duration * sampleRate;
+  const buffer = ctx.createBuffer(1, samples, sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  // Simple soft "ping" sound
+  for (let i = 0; i < samples; i++) {
+    const t = i / sampleRate;
+    // Single gentle tone at 880Hz (A5)
+    const freq = 880;
+    // Quick fade out envelope
+    const env = Math.exp(-8 * t / duration);
+    // Simple sine wave
+    data[i] = env * 0.2 * Math.sin(2 * Math.PI * freq * t);
+  }
+  
+  return { ctx, buffer };
+}
 
-  recognition.onresult = (e) => {
-    if (isProcessing) return;
-    setVoiceActive(true);
+// Play the thinking sound in a loop
+function playWaitingSound() {
+  if (thinkingInterval) return; // Already playing
+  
+  console.log('🔊 Thinking sound started');
+  
+  // Play initial sound
+  playThinkingPulse();
+  
+  // Loop every 2 seconds (less frequent, less annoying)
+  thinkingInterval = setInterval(playThinkingPulse, 2000);
+}
 
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const r = e.results[i];
-      if (r.isFinal) final += r[0].transcript + ' ';
-      else interim += r[0].transcript;
+function playThinkingPulse() {
+  try {
+    const { ctx, buffer } = createThinkingSound();
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    
+    source.buffer = buffer;
+    gain.gain.setValueAtTime(0.2, ctx.currentTime); // Gentle volume
+    
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
+    
+    // Clean up after playing
+    source.onended = () => {
+      source.disconnect();
+      gain.disconnect();
+      ctx.close().catch(() => {});
+    };
+  } catch (e) {
+    console.error('Thinking sound error:', e);
+  }
+}
+
+// Stop the thinking sound
+function stopWaitingSound() {
+  if (thinkingInterval) {
+    clearInterval(thinkingInterval);
+    thinkingInterval = null;
+    console.log('🔇 Thinking sound stopped');
+  }
+}
+
+// Voice transcript message helpers
+let currentUserMsg = null;
+let currentAssistantMsg = null;
+
+function addVoiceMessage(role, text) {
+  if (!voiceContent) return null;
+  
+  const msg = document.createElement('div');
+  msg.className = `voice-msg ${role}`;
+  msg.textContent = text;
+  voiceContent.appendChild(msg);
+  
+  // Auto-scroll to bottom
+  voiceContent.scrollTop = voiceContent.scrollHeight;
+  
+  return msg;
+}
+
+function updateVoiceStatus(text) {
+  if (voiceStatus) {
+    voiceStatus.textContent = text;
+  }
+}
+
+// Build realtime WebSocket URL
+function getRealtimeWsUrl() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const base = `${protocol}//${location.host}`;
+  const path = location.pathname.replace(/\/+$/, '');
+  return path && path !== '/' ? `${base}${path}/realtime` : `${base}/realtime`;
+}
+
+// Convert Float32Array to base64 PCM16
+function float32ToBase64PCM16(float32Array) {
+  const pcm16 = new Int16Array(float32Array.length);
+  for (let i = 0; i < float32Array.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32Array[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  const bytes = new Uint8Array(pcm16.buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// Convert base64 PCM16 to Float32Array
+function base64PCM16ToFloat32(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const pcm16 = new Int16Array(bytes.buffer);
+  const float32 = new Float32Array(pcm16.length);
+  for (let i = 0; i < pcm16.length; i++) {
+    float32[i] = pcm16[i] / (pcm16[i] < 0 ? 0x8000 : 0x7FFF);
+  }
+  return float32;
+}
+
+// Play audio from queue (PCM16 format - legacy realtime mode)
+async function playAudioQueue() {
+  if (isPlaying || audioQueue.length === 0) return;
+  isPlaying = true;
+  
+  while (audioQueue.length > 0) {
+    const audioData = audioQueue.shift();
+    try {
+      if (!realtimePlaybackContext) {
+        realtimePlaybackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      }
+      
+      const float32 = base64PCM16ToFloat32(audioData);
+      const audioBuffer = realtimePlaybackContext.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+      
+      const source = realtimePlaybackContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(realtimePlaybackContext.destination);
+      
+      await new Promise(resolve => {
+        source.onended = resolve;
+        source.start();
+      });
+    } catch (e) {
+      console.error('Audio playback error:', e);
     }
+  }
+  
+  // Small delay before lowering volume gate
+  await new Promise(r => setTimeout(r, 100));
+  isPlaying = false;
+}
 
-    const currentText = (final + interim).trim();
-    if (currentText && voiceTranscript) {
-      voiceTranscript.textContent = currentText;
-      voiceTranscript.classList.remove('placeholder');
+// TTS audio buffer for reassembly
+let ttsAudioBuffer = [];
+
+// Play audio from queue (TTS API format - hybrid mode)
+// OpenAI TTS returns raw PCM at 24000Hz
+async function playAudioQueueTTS() {
+  if (isPlaying) return;
+  
+  // Collect all chunks first (TTS chunks need to be played together)
+  while (audioQueue.length > 0) {
+    ttsAudioBuffer.push(audioQueue.shift());
+  }
+  
+  // If we have accumulated audio, play it
+  if (ttsAudioBuffer.length > 0) {
+    isPlaying = true;
+    
+    try {
+      // Combine all base64 chunks
+      const combinedBase64 = ttsAudioBuffer.join('');
+      ttsAudioBuffer = [];
+      
+      // Convert base64 to raw bytes
+      const binary = atob(combinedBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      
+      // OpenAI TTS PCM format: 24000Hz, 16-bit signed little-endian
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / (pcm16[i] < 0 ? 0x8000 : 0x7FFF);
+      }
+      
+      // Create audio context and play
+      const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+      
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      
+      await new Promise(resolve => {
+        source.onended = () => {
+          ctx.close().catch(() => {});
+          resolve();
+        };
+        source.start();
+      });
+      
+      // CRITICAL: Notify server that playback finished so it can resume listening
+      if (hybridWs && hybridWs.readyState === WebSocket.OPEN) {
+        hybridWs.send(JSON.stringify({ type: 'audio_playback_ended' }));
+        console.log('🔊 Notified server: playback ended');
+      }
+      
+    } catch (e) {
+      console.error('TTS playback error:', e);
+      // Still notify server even on error
+      if (hybridWs && hybridWs.readyState === WebSocket.OPEN) {
+        hybridWs.send(JSON.stringify({ type: 'audio_playback_ended' }));
+      }
     }
+    
+    // Small delay before lowering volume gate
+    await new Promise(r => setTimeout(r, 100));
+    isPlaying = false;
+  }
+}
 
-    clearTimeout(timer);
-    timer = setTimeout(() => {
+// Stop audio playback
+function stopAudioPlayback() {
+  audioQueue = [];
+  isPlaying = false;
+  if (realtimePlaybackContext) {
+    realtimePlaybackContext.close().catch(() => {});
+    realtimePlaybackContext = null;
+  }
+}
+
+// Wave animation state (CSS-based, JS just tracks analyser for speaking detection)
+let waveAnimationFrame = null;
+let analyserNode = null;
+
+// Start monitoring audio for speaking detection
+function startWaveAnimation() {
+  // CSS handles the actual animation, we just detect speaking state
+  function checkSpeaking() {
+    if (analyserNode) {
+      const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+      analyserNode.getByteFrequencyData(dataArray);
+      
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const amplitude = (sum / dataArray.length) / 255;
+      const isSpeaking = amplitude > 0.05;
+      
+      // Toggle speaking class on voice-bar
+      const voiceBar = document.getElementById('voice-bar');
+      if (voiceBar) {
+        voiceBar.classList.toggle('speaking', isSpeaking);
+      }
+    }
+    waveAnimationFrame = requestAnimationFrame(checkSpeaking);
+  }
+  checkSpeaking();
+}
+
+// Stop wave animation monitoring
+function stopWaveAnimation() {
+  if (waveAnimationFrame) {
+    cancelAnimationFrame(waveAnimationFrame);
+    waveAnimationFrame = null;
+  }
+  const voiceBar = document.getElementById('voice-bar');
+  if (voiceBar) {
+    voiceBar.classList.remove('speaking');
+  }
+}
+
+// Start audio capture and streaming
+async function startAudioCapture() {
+  try {
+    realtimeAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+    realtimeMediaStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: { 
+        sampleRate: 24000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true
+      } 
+    });
+    
+    const source = realtimeAudioContext.createMediaStreamSource(realtimeMediaStream);
+    
+    // Add analyser for wave visualization
+    analyserNode = realtimeAudioContext.createAnalyser();
+    analyserNode.fftSize = 256;
+    source.connect(analyserNode);
+    
+    // Start wave animation
+    startWaveAnimation();
+    
+    // Use ScriptProcessorNode for capturing audio (deprecated but widely supported)
+    realtimeScriptProcessor = realtimeAudioContext.createScriptProcessor(4096, 1, 1);
+    
+    realtimeScriptProcessor.onaudioprocess = (e) => {
+      if (realtimeWs && realtimeWs.readyState === WebSocket.OPEN) {
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Calculate RMS volume
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / inputData.length);
+        
+        // While playing: only send if volume is high (user interrupting)
+        // Echo is typically ~0.01-0.03 RMS, direct speech is ~0.05-0.2+
+        if (isPlaying && rms < 0.04) return;
+        
+        const base64Audio = float32ToBase64PCM16(inputData);
+        realtimeWs.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+      }
+    };
+    
+    source.connect(realtimeScriptProcessor);
+    realtimeScriptProcessor.connect(realtimeAudioContext.destination);
+    
+    console.log('🎤 Audio capture started');
+    return true;
+  } catch (e) {
+    console.error('Audio capture error:', e);
+    toast('Microphone access denied', true);
+    return false;
+  }
+}
+
+// Stop audio capture
+function stopAudioCapture() {
+  // Stop wave animation
+  stopWaveAnimation();
+  analyserNode = null;
+  
+  if (realtimeScriptProcessor) {
+    realtimeScriptProcessor.disconnect();
+    realtimeScriptProcessor = null;
+  }
+  if (realtimeMediaStream) {
+    realtimeMediaStream.getTracks().forEach(t => t.stop());
+    realtimeMediaStream = null;
+  }
+  if (realtimeAudioContext) {
+    realtimeAudioContext.close().catch(() => {});
+    realtimeAudioContext = null;
+  }
+  console.log('🎤 Audio capture stopped');
+}
+
+// Connect to realtime WebSocket
+function connectRealtime() {
+  const url = getRealtimeWsUrl();
+  console.log('🔗 Connecting to realtime:', url);
+  
+  realtimeWs = new WebSocket(url);
+  
+  realtimeWs.onopen = async () => {
+    console.log('✅ Realtime connected');
+    setStatus('');
+    
+    // Start audio capture
+    const started = await startAudioCapture();
+    if (!started) {
+      stopVoice();
+    }
+  };
+  
+  realtimeWs.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleRealtimeMessage(msg);
+    } catch (err) {
+      console.error('Failed to parse realtime message:', err);
+    }
+  };
+  
+  realtimeWs.onclose = () => {
+    console.log('🔌 Realtime disconnected');
+    if (isListening) {
+      setStatus('Reconnecting...');
+      setTimeout(connectRealtime, 2000);
+    }
+  };
+  
+  realtimeWs.onerror = (e) => {
+    console.error('Realtime WebSocket error:', e);
+    setStatus('Connection error');
+  };
+}
+
+// Handle messages from realtime server (supports both legacy and hybrid modes)
+function handleRealtimeMessage(msg) {
+  switch (msg.type) {
+    case 'ready':
+      const modeLabel = msg.mode === 'hybrid' ? 'Hybrid (Claude)' : 'Direct';
+      console.log(`🎙️ Realtime session ready - Mode: ${modeLabel}`);
+      updateVoiceStatus('Listening');
+      break;
+      
+    case 'user_speaking':
+      setVoiceActive(true);
+      updateVoiceStatus('Hearing you...');
+      // Stop any playing audio when user speaks (interruption)
+      stopAudioPlayback();
+      stopWaitingSound();
+      // Reset for new turn
+      currentUserMsg = null;
+      currentAssistantMsg = null;
+      break;
+      
+    case 'user_stopped':
       setVoiceActive(false);
-      const text = final.trim();
-      if (text && !isProcessing) {
-        send(text, 'voice');
-        final = '';
-        if (voiceTranscript) {
-          voiceTranscript.textContent = 'Start speaking...';
-          voiceTranscript.classList.add('placeholder');
+      updateVoiceStatus('Processing...');
+      // Start thinking sound when user stops speaking
+      playWaitingSound();
+      break;
+      
+    case 'interim':
+    case 'transcript':
+      // User's transcribed speech
+      stopWaitingSound();
+      if (msg.text && voiceContent) {
+        if (!currentUserMsg) {
+          // Create user message element
+          const userMsg = document.createElement('div');
+          userMsg.className = 'voice-msg user';
+          userMsg.textContent = msg.text;
+          
+          // If assistant already started responding, insert BEFORE it
+          if (currentAssistantMsg && currentAssistantMsg.parentNode === voiceContent) {
+            voiceContent.insertBefore(userMsg, currentAssistantMsg);
+          } else {
+            voiceContent.appendChild(userMsg);
+          }
+          currentUserMsg = userMsg;
+        } else {
+          currentUserMsg.textContent = msg.text;
+        }
+        voiceContent.scrollTop = voiceContent.scrollHeight;
+      }
+      playWaitingSound();
+      break;
+    
+    case 'processing':
+      // Hybrid mode: processing with Spark Opus
+      const engineName = msg.engine || 'Spark Opus';
+      const statusMsg = msg.message || `Checking with ${engineName}...`;
+      console.log(`🧠 ${statusMsg}`);
+      updateVoiceStatus(statusMsg);
+      playWaitingSound();
+      if (!currentAssistantMsg) {
+        currentAssistantMsg = addVoiceMessage('assistant', statusMsg);
+        currentAssistantMsg.classList.add('thinking');
+      } else {
+        currentAssistantMsg.textContent = statusMsg;
+        currentAssistantMsg.classList.add('thinking');
+      }
+      break;
+      
+    case 'text_delta':
+      // AI response streaming text (legacy mode)
+      stopWaitingSound();
+      updateVoiceStatus('Speaking...');
+      if (msg.delta) {
+        if (!currentAssistantMsg) {
+          currentAssistantMsg = addVoiceMessage('assistant', msg.delta);
+        } else {
+          currentAssistantMsg.textContent += msg.delta;
+          currentAssistantMsg.classList.remove('thinking');
+        }
+        // Auto-scroll
+        if (voiceContent) voiceContent.scrollTop = voiceContent.scrollHeight;
+      }
+      break;
+      
+    case 'text':
+      // Full AI response text
+      stopWaitingSound();
+      if (msg.content) {
+        if (!currentAssistantMsg) {
+          currentAssistantMsg = addVoiceMessage('assistant', msg.content);
+        } else {
+          currentAssistantMsg.textContent = msg.content;
+          currentAssistantMsg.classList.remove('thinking');
         }
       }
-    }, CONFIG.silenceMs);
-  };
-
-  recognition.onerror = (e) => {
-    if (e.error !== 'no-speech' && e.error !== 'aborted') {
-      toast('Mic error: ' + e.error, true);
-    }
-  };
-
-  recognition.onend = () => {
-    if (isListening && !isProcessing) {
-      setTimeout(() => { try { recognition.start(); } catch {} }, 100);
-    }
-  };
-
-  return true;
+      break;
+    
+    case 'tts_start':
+      // Hybrid mode: TTS generation starting
+      console.log('🔊 Generating speech...');
+      updateVoiceStatus('Speaking...');
+      stopWaitingSound();
+      break;
+    
+    case 'audio_chunk':
+      // Hybrid mode: audio chunk (TTS API format - needs conversion)
+      stopWaitingSound();
+      updateVoiceStatus('Speaking...');
+      if (msg.data) {
+        // Queue audio chunk for playback
+        audioQueue.push(msg.data);
+        playAudioQueueTTS();
+      }
+      break;
+      
+    case 'audio_delta':
+      // Audio chunk from AI (legacy mode - PCM16)
+      stopWaitingSound();
+      updateVoiceStatus('Speaking...');
+      if (msg.data) {
+        audioQueue.push(msg.data);
+        playAudioQueue();
+      }
+      break;
+      
+    case 'audio_done':
+      console.log('🔊 Audio complete');
+      break;
+      
+    case 'tool_call':
+      // Tool is being executed - show feedback and play waiting sound
+      console.log('🔧 Tool call:', msg.name);
+      const toolName = msg.name?.replace('get_', '').replace('ask_', '').replace('_', ' ') || 'info';
+      updateVoiceStatus(`Checking ${toolName}...`);
+      // Add a thinking message
+      if (!currentAssistantMsg) {
+        currentAssistantMsg = addVoiceMessage('assistant', `Checking ${toolName}...`);
+        currentAssistantMsg.classList.add('thinking');
+      }
+      playWaitingSound();
+      break;
+      
+    case 'done':
+      // Response complete - reset for next turn (but keep messages!)
+      stopWaitingSound();
+      currentUserMsg = null;
+      currentAssistantMsg = null;
+      updateVoiceStatus('Listening');
+      break;
+      
+    case 'error':
+      stopWaitingSound();
+      console.error('Realtime error:', msg.message);
+      toast(msg.message || 'Voice error', true);
+      updateVoiceStatus('Error');
+      break;
+      
+    case 'disconnected':
+      stopWaitingSound();
+      if (isListening) {
+        toast('Disconnected', true);
+      }
+      break;
+  }
 }
 
 function startVoice() {
-  if (!recognition && !initSpeech()) {
-    toast('Speech not supported', true);
-    return;
-  }
   mode = 'voice';
   isListening = true;
   document.body.classList.add('voice-mode');
   bottomEl?.classList.add('voice-active');
-  if (voiceTranscript) {
-    voiceTranscript.textContent = 'Start speaking...';
-    voiceTranscript.classList.add('placeholder');
-  }
-  try { recognition.start(); } catch {}
+  
+  // Reset message state
+  currentUserMsg = null;
+  currentAssistantMsg = null;
+  
+  // Update status indicator
+  updateVoiceStatus('Connecting...');
+  setStatus('Connecting...');
+  connectRealtime();
 }
 
 function stopVoice() {
@@ -272,7 +836,24 @@ function stopVoice() {
   document.body.classList.remove('voice-mode');
   bottomEl?.classList.remove('voice-active');
   voiceBar?.classList.remove('speaking');
-  try { recognition.stop(); } catch {}
+  
+  // Reset message state
+  currentUserMsg = null;
+  currentAssistantMsg = null;
+  
+  // Stop audio capture
+  stopAudioCapture();
+  
+  // Stop playback
+  stopAudioPlayback();
+  
+  // Close realtime WebSocket
+  if (realtimeWs) {
+    realtimeWs.send(JSON.stringify({ type: 'stop' }));
+    realtimeWs.close();
+    realtimeWs = null;
+  }
+  
   mode = 'chat';
 }
 
@@ -422,13 +1003,37 @@ deleteNotesBtn?.addEventListener('click', discardRecording);
 // WEBSOCKET
 // ============================================================================
 
+// Session persistence
+let chatSessionId = localStorage.getItem('spark_session_id');
+
 function connect() {
+  // Build URL with session ID for reconnection
+  let wsUrl = CONFIG.wsUrl;
+  if (chatSessionId) {
+    wsUrl += (wsUrl.includes('?') ? '&' : '?') + `session=${chatSessionId}`;
+  }
+  
+  console.log('🔌 Connecting to:', wsUrl);
   setStatus('Connecting...');
-  ws = new WebSocket(CONFIG.wsUrl);
-  ws.onopen = () => setStatus('');
-  ws.onclose = () => { setStatus('Disconnected'); setTimeout(connect, 2000); };
-  ws.onerror = () => setStatus('Connection error');
-  ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
+  try {
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      console.log('✅ Chat WebSocket connected');
+      setStatus('');
+    };
+    ws.onclose = (e) => {
+      console.log('🔌 Chat WebSocket closed:', e.code, e.reason);
+      setStatus('Disconnected');
+      setTimeout(connect, 2000);
+    };
+    ws.onerror = (e) => {
+      console.error('❌ Chat WebSocket error:', e);
+      setStatus('Connection error');
+    };
+    ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
+  } catch (e) {
+    console.error('❌ Failed to create WebSocket:', e);
+  }
 }
 
 function send(text, sendMode) {
@@ -439,14 +1044,38 @@ function send(text, sendMode) {
   isProcessing = true;
   addMsg(text, 'user');
   showThinking();
+  setStatus('Sending...');
   ws.send(JSON.stringify({ type: 'transcript', text, mode: sendMode }));
 }
 
 function handle(data) {
   switch (data.type) {
-    case 'ready': setStatus(''); break;
+    case 'ready': 
+      // Store session ID for reconnection
+      if (data.sessionId) {
+        chatSessionId = data.sessionId;
+        localStorage.setItem('spark_session_id', data.sessionId);
+        console.log('📋 Session:', data.sessionId);
+      }
+      // Check if there's a pending request
+      if (data.pending) {
+        console.log('⏳ Pending request detected - showing loading');
+        showThinking();
+        setStatus('Still thinking...');
+      } else {
+        setStatus('');
+      }
+      console.log('✅ Chat ready');
+      break;
+    case 'thinking':
+      // Server acknowledged request and is processing
+      console.log('🤔 Server thinking...');
+      showThinking();
+      setStatus('Thinking...');
+      break;
     case 'text':
       removeThinking();
+      setStatus('');
       const lastSys = messagesEl?.querySelector('.msg.system:last-child');
       if (lastSys?.textContent === 'Transcribing...') lastSys.remove();
       addMsg(data.content, 'bot');
@@ -588,7 +1217,7 @@ menuDelete?.addEventListener('click', () => {
 // INIT
 // ============================================================================
 
-initSpeech();
+// Initialize WebSocket connection
 connect();
 
 // Keyboard detection

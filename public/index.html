@@ -65,14 +65,15 @@
       max-width: 100%;
     }
 
-    /* Voice mode content */
+    /* Voice mode content - scrolling transcript log */
     #voice-content {
       display: none;
       flex: 1;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
       padding: 24px;
-      padding-bottom: 120px;
+      padding-bottom: 100px;
+      overflow-y: auto;
+      gap: 16px;
     }
 
     body.voice-mode #voice-content {
@@ -83,18 +84,44 @@
       display: none;
     }
 
-    #voice-content .transcript {
-      font-size: 28px;
-      font-weight: 500;
-      color: var(--text);
-      text-align: center;
-      line-height: 1.4;
-      max-width: 100%;
+    /* Voice transcript messages */
+    #voice-content .voice-msg {
+      font-size: 20px;
+      line-height: 1.5;
+      padding: 12px 16px;
+      border-radius: 16px;
+      max-width: 85%;
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    #voice-content .transcript.placeholder {
-      color: var(--text-tertiary);
-      font-weight: 400;
+    /* User messages - right aligned, darker grey */
+    #voice-content .voice-msg.user {
+      align-self: flex-end;
+      background: rgba(255, 255, 255, 0.08);
+      color: #b0b0b0;
+    }
+
+    /* Assistant messages - left aligned, lighter grey */
+    #voice-content .voice-msg.assistant {
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.04);
+      color: #d0d0d0;
+    }
+    
+    /* Thinking/processing state */
+    #voice-content .voice-msg.thinking {
+      color: var(--accent);
+      animation: pulse-text 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-text {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
     }
 
     /* Notes mode content */
@@ -115,6 +142,14 @@
 
     body.notes-mode #messages {
       display: none;
+    }
+
+    /* Hide history and clear buttons in voice/notes modes */
+    body.voice-mode #history-btn,
+    body.voice-mode #clear-chat-btn,
+    body.notes-mode #history-btn,
+    body.notes-mode #clear-chat-btn {
+      display: none !important;
     }
 
     #notes-content .timer {
@@ -445,6 +480,11 @@
       min-height: 56px;
       transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+    
+    /* Listening indicator in voice bar */
+    #voice-bar .listening-indicator {
+      display: none;
+    }
 
     #bottom.voice-active #voice-bar {
       display: flex;
@@ -498,37 +538,88 @@
       50% { opacity: 1; transform: scale(1.2); }
     }
 
-    /* Voice waveform */
+    /* Voice waveform - subtle grey bars FULL WIDTH */
     #waveform {
       flex: 1;
-      height: 24px;
+      height: 32px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 3px;
+      gap: 2px;
     }
 
-    .wave-bar {
-      width: 3px;
-      height: 4px;
-      background: #999;
+    #waveform .bar {
+      flex: 1;
+      height: 8px;
+      background: rgba(150, 150, 150, 0.45);
       border-radius: 2px;
-      transition: height 0.1s ease;
+      animation: wave-idle 1.2s ease-in-out infinite;
     }
 
-    #voice-bar.speaking .wave-bar {
-      animation: wave 0.5s ease-in-out infinite;
+    #waveform .bar:nth-child(1) { animation-delay: 0.0s; }
+    #waveform .bar:nth-child(2) { animation-delay: 0.03s; }
+    #waveform .bar:nth-child(3) { animation-delay: 0.06s; }
+    #waveform .bar:nth-child(4) { animation-delay: 0.09s; }
+    #waveform .bar:nth-child(5) { animation-delay: 0.12s; }
+    #waveform .bar:nth-child(6) { animation-delay: 0.15s; }
+    #waveform .bar:nth-child(7) { animation-delay: 0.18s; }
+    #waveform .bar:nth-child(8) { animation-delay: 0.21s; }
+    #waveform .bar:nth-child(9) { animation-delay: 0.24s; }
+    #waveform .bar:nth-child(10) { animation-delay: 0.27s; }
+    #waveform .bar:nth-child(11) { animation-delay: 0.30s; }
+    #waveform .bar:nth-child(12) { animation-delay: 0.33s; }
+    #waveform .bar:nth-child(13) { animation-delay: 0.36s; }
+    #waveform .bar:nth-child(14) { animation-delay: 0.39s; }
+    #waveform .bar:nth-child(15) { animation-delay: 0.42s; }
+    #waveform .bar:nth-child(16) { animation-delay: 0.45s; }
+    #waveform .bar:nth-child(17) { animation-delay: 0.48s; }
+    #waveform .bar:nth-child(18) { animation-delay: 0.45s; }
+    #waveform .bar:nth-child(19) { animation-delay: 0.42s; }
+    #waveform .bar:nth-child(20) { animation-delay: 0.39s; }
+    #waveform .bar:nth-child(21) { animation-delay: 0.36s; }
+    #waveform .bar:nth-child(22) { animation-delay: 0.33s; }
+    #waveform .bar:nth-child(23) { animation-delay: 0.30s; }
+    #waveform .bar:nth-child(24) { animation-delay: 0.27s; }
+    #waveform .bar:nth-child(25) { animation-delay: 0.24s; }
+    #waveform .bar:nth-child(26) { animation-delay: 0.21s; }
+    #waveform .bar:nth-child(27) { animation-delay: 0.18s; }
+    #waveform .bar:nth-child(28) { animation-delay: 0.15s; }
+    #waveform .bar:nth-child(29) { animation-delay: 0.12s; }
+    #waveform .bar:nth-child(30) { animation-delay: 0.09s; }
+    #waveform .bar:nth-child(31) { animation-delay: 0.06s; }
+    #waveform .bar:nth-child(32) { animation-delay: 0.03s; }
+    #waveform .bar:nth-child(33) { animation-delay: 0.0s; }
+    #waveform .bar:nth-child(34) { animation-delay: 0.03s; }
+    #waveform .bar:nth-child(35) { animation-delay: 0.06s; }
+    #waveform .bar:nth-child(36) { animation-delay: 0.09s; }
+    #waveform .bar:nth-child(37) { animation-delay: 0.12s; }
+    #waveform .bar:nth-child(38) { animation-delay: 0.15s; }
+    #waveform .bar:nth-child(39) { animation-delay: 0.18s; }
+    #waveform .bar:nth-child(40) { animation-delay: 0.21s; }
+    #waveform .bar:nth-child(41) { animation-delay: 0.24s; }
+    #waveform .bar:nth-child(42) { animation-delay: 0.27s; }
+    #waveform .bar:nth-child(43) { animation-delay: 0.30s; }
+    #waveform .bar:nth-child(44) { animation-delay: 0.33s; }
+    #waveform .bar:nth-child(45) { animation-delay: 0.36s; }
+    #waveform .bar:nth-child(46) { animation-delay: 0.39s; }
+    #waveform .bar:nth-child(47) { animation-delay: 0.42s; }
+    #waveform .bar:nth-child(48) { animation-delay: 0.45s; }
+    #waveform .bar:nth-child(49) { animation-delay: 0.48s; }
+    #waveform .bar:nth-child(50) { animation-delay: 0.51s; }
+
+    @keyframes wave-idle {
+      0%, 100% { height: 5px; }
+      50% { height: 12px; }
     }
 
-    .wave-bar:nth-child(1) { animation-delay: 0s; }
-    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
-    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
-    .wave-bar:nth-child(4) { animation-delay: 0.1s; }
-    .wave-bar:nth-child(5) { animation-delay: 0s; }
+    #voice-bar.speaking #waveform .bar {
+      background: rgba(120, 120, 120, 0.6);
+      animation-name: wave-active;
+      animation-duration: 0.4s;
+    }
 
-    @keyframes wave {
+    @keyframes wave-active {
       0%, 100% { height: 4px; }
-      50% { height: 20px; }
+      50% { height: 18px; }
     }
 
     /* Close button - separate circle outside voice bar */
@@ -765,9 +856,8 @@
       height: 32px;
       min-width: 32px;
       flex-shrink: 0;
-      border-radius: 50%;
       border: none;
-      background: rgba(0, 0, 0, 0.05);
+      background: transparent;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -775,13 +865,13 @@
       transition: all 0.2s;
     }
 
-    #upload-btn:active { transform: scale(0.9); }
+    #upload-btn:active { transform: scale(0.9); opacity: 0.6; }
 
     #upload-btn svg {
-      width: 16px;
-      height: 16px;
+      width: 28px;
+      height: 28px;
       stroke: var(--text-secondary);
-      stroke-width: 2;
+      stroke-width: 1.8;
       fill: none;
     }
 
@@ -811,17 +901,15 @@
       height: 32px;
       min-width: 32px;
       flex-shrink: 0;
-      border-radius: 50%;
       border: none;
-      background: var(--accent);
+      background: transparent;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       opacity: 0;
-      transform: scale(0.6);
+      transform: scale(0.8);
       transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-      box-shadow: 0 4px 12px var(--accent-glow);
     }
 
     #send-btn.show {
@@ -830,12 +918,11 @@
     }
 
     #send-btn svg {
-      width: 14px;
-      height: 14px;
-      stroke: white;
-      stroke-width: 2.5;
+      width: 24px;
+      height: 24px;
+      stroke: var(--accent);
+      stroke-width: 2;
       fill: none;
-      margin-left: 1px;
     }
 
     #status {
@@ -949,10 +1036,10 @@
       font-weight: 500;
       color: var(--text-secondary);
       cursor: pointer;
-      z-index: 9;
+      z-index: 15;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s ease;
+      transition: opacity 0.2s ease;
     }
 
     #close-btn.show {
@@ -962,6 +1049,7 @@
 
     #close-btn:active {
       transform: translateX(-50%) scale(0.95);
+      background: rgba(0,0,0,0.08);
     }
 
     /* History panel */
@@ -1135,9 +1223,9 @@
       </div>
     </div>
 
-    <!-- Voice mode content -->
+    <!-- Voice mode content - scrolling transcript log -->
     <div id="voice-content">
-      <div class="transcript placeholder" id="voice-transcript">Start speaking...</div>
+      <!-- Messages will be appended here dynamically -->
     </div>
 
     <!-- Notes mode content -->
@@ -1198,12 +1286,9 @@
           </svg>
         </div>
         <div id="waveform">
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
         </div>
+        <span class="listening-indicator" id="voice-status">Listening</span>
       </div>
 
       <!-- Close voice button - separate circle -->
@@ -1286,6 +1371,6 @@
       </svg>
     </button>
   </div>
-  <script type="module" src="app.js?v=40"></script>
+  <script type="module" src="app.js?v=62"></script>
 </body>
 </html>

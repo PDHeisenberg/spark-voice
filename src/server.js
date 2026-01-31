@@ -14,6 +14,8 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { TTSProvider } from './providers/tts.js';
 import { loadConfig } from './config.js';
+import { handleRealtimeSession } from './realtime.js';
+import { handleHybridRealtimeSession } from './hybrid-realtime.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -475,24 +477,110 @@ app.get('/api/reports/today', async (req, res) => {
 // HTTP server
 const server = createServer(app);
 
-// WebSocket server
-const wss = new WebSocketServer({ server, maxPayload: 50 * 1024 * 1024 }); // 50MB max for large files
+// WebSocket server for chat/notes (existing)
+const wss = new WebSocketServer({ noServer: true, maxPayload: 50 * 1024 * 1024 });
+
+// WebSocket server for realtime voice (new)
+const wssRealtime = new WebSocketServer({ noServer: true });
+
+// Handle WebSocket upgrade - route to correct server
+server.on('upgrade', (request, socket, head) => {
+  const url = new URL(request.url, 'http://localhost');
+  const pathname = url.pathname;
+  // Default to pure realtime (fast GPT-4o), hybrid only if explicitly requested
+  const useHybrid = url.searchParams.get('mode') === 'hybrid';
+  
+  console.log(`🔌 WebSocket upgrade request: ${pathname}`);
+  
+  // Route /realtime to realtime voice handler
+  if (pathname === '/realtime' || pathname.endsWith('/realtime')) {
+    wssRealtime.handleUpgrade(request, socket, head, (ws) => {
+      if (useHybrid) {
+        console.log('🎙️ Hybrid mode (STT → Claude → TTS)');
+        handleHybridRealtimeSession(ws);
+      } else {
+        console.log('🎙️ Pure Realtime mode (GPT-4o end-to-end)');
+        handleRealtimeSession(ws);
+      }
+    });
+  } else {
+    // Route everything else to existing handler (chat/notes)
+    console.log('💬 Chat WebSocket connection');
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
+});
 
 // Session store
 const sessions = new Map();
 
-// Connection handler
-wss.on('connection', (ws) => {
-  const sessionId = `spark_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-  console.log(`⚡ [${sessionId}] Connected`);
+// Pending requests store - persists across reconnections
+const pendingRequests = new Map();
+
+// Get or create session
+function getOrCreateSession(sessionId) {
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, {
+      history: [],
+      createdAt: Date.now(),
+      ws: null,
+    });
+  }
+  return sessions.get(sessionId);
+}
+
+// Send to client if connected
+function sendToClient(sessionId, data) {
+  const session = sessions.get(sessionId);
+  if (session?.ws?.readyState === 1) { // WebSocket.OPEN
+    session.ws.send(JSON.stringify(data));
+    return true;
+  }
+  return false;
+}
+
+// Connection handler for chat/notes
+wss.on('connection', (ws, request) => {
+  // Check if client is reconnecting with existing session
+  const url = new URL(request.url, 'http://localhost');
+  let sessionId = url.searchParams.get('session');
   
-  sessions.set(sessionId, {
-    history: [],
-    createdAt: Date.now(),
-  });
+  if (sessionId && sessions.has(sessionId)) {
+    // Reconnecting to existing session
+    console.log(`⚡ [${sessionId}] Reconnected`);
+  } else {
+    // New session
+    sessionId = `spark_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    console.log(`⚡ [${sessionId}] New connection`);
+  }
   
+  const session = getOrCreateSession(sessionId);
+  session.ws = ws;
   ws.sessionId = sessionId;
-  ws.send(JSON.stringify({ type: 'ready', sessionId }));
+  
+  // Check for pending request results
+  const pending = pendingRequests.get(sessionId);
+  if (pending) {
+    if (pending.status === 'processing') {
+      // Still processing - tell client
+      ws.send(JSON.stringify({ type: 'ready', sessionId, pending: true }));
+      ws.send(JSON.stringify({ type: 'thinking' }));
+    } else if (pending.status === 'complete') {
+      // Response ready - send it
+      ws.send(JSON.stringify({ type: 'ready', sessionId }));
+      ws.send(JSON.stringify({ type: 'text', content: pending.response }));
+      ws.send(JSON.stringify({ type: 'done' }));
+      pendingRequests.delete(sessionId);
+    } else if (pending.status === 'error') {
+      ws.send(JSON.stringify({ type: 'ready', sessionId }));
+      ws.send(JSON.stringify({ type: 'error', message: pending.error }));
+      ws.send(JSON.stringify({ type: 'done' }));
+      pendingRequests.delete(sessionId);
+    }
+  } else {
+    ws.send(JSON.stringify({ type: 'ready', sessionId }));
+  }
   
   ws.on('message', async (data) => {
     try {
@@ -505,7 +593,9 @@ wss.on('connection', (ws) => {
   });
   
   ws.on('close', () => {
-    console.log(`[${sessionId}] Disconnected`);
+    console.log(`[${sessionId}] Disconnected (processing continues)`);
+    // Don't delete session - keep it for reconnection
+    if (session) session.ws = null;
   });
 });
 
@@ -545,16 +635,25 @@ async function extractDocxText(dataUrl) {
 }
 
 // Handle text/voice transcript (with optional image or file)
+// Processing continues even if client disconnects
 async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData) {
   if (!text?.trim()) return;
   
+  const sessionId = ws.sessionId;
   const hasImage = !!imageDataUrl;
   // Use Sonnet for images (faster), Opus for text-only chat
   const model = hasImage ? 'claude-sonnet-4-20250514' : (MODELS[mode] || MODELS.chat);
   const hasFile = !!fileData;
-  console.log(`🎤 [${ws.sessionId}] (${mode}) User: ${text.slice(0, 50)}...${hasImage ? ' [+image]' : ''}${hasFile ? ` [+${fileData.filename}]` : ''}`);
+  console.log(`🎤 [${sessionId}] (${mode}) User: ${text.slice(0, 50)}...${hasImage ? ' [+image]' : ''}${hasFile ? ` [+${fileData.filename}]` : ''}`);
   
-  ws.send(JSON.stringify({ type: 'thinking' }));
+  // Mark request as pending - processing will continue even if client disconnects
+  pendingRequests.set(sessionId, { 
+    status: 'processing', 
+    startTime: Date.now(),
+    text: text.slice(0, 100)
+  });
+  
+  sendToClient(sessionId, { type: 'thinking' });
   
   // Load shared history from main Clawdbot session
   const sharedHistory = loadSessionHistory(20);
@@ -583,10 +682,10 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
       let extractedText = '';
       
       if (ext === 'pdf') {
-        console.log(`📄 [${ws.sessionId}] Extracting PDF: ${fileData.filename}`);
+        console.log(`📄 [${sessionId}] Extracting PDF: ${fileData.filename}`);
         extractedText = await extractPdfText(fileData.dataUrl);
       } else if (ext === 'docx' || ext === 'doc') {
-        console.log(`📄 [${ws.sessionId}] Extracting DOCX: ${fileData.filename}`);
+        console.log(`📄 [${sessionId}] Extracting DOCX: ${fileData.filename}`);
         extractedText = await extractDocxText(fileData.dataUrl);
       }
       
@@ -599,9 +698,10 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
       userContent = fullText;
     }
   } catch (e) {
-    console.error(`[${ws.sessionId}] File extraction error:`, e.message);
-    ws.send(JSON.stringify({ type: 'error', message: `Failed to read file: ${e.message}` }));
-    ws.send(JSON.stringify({ type: 'done' }));
+    console.error(`[${sessionId}] File extraction error:`, e.message);
+    pendingRequests.set(sessionId, { status: 'error', error: `Failed to read file: ${e.message}` });
+    sendToClient(sessionId, { type: 'error', message: `Failed to read file: ${e.message}` });
+    sendToClient(sessionId, { type: 'done' });
     return;
   }
   
@@ -617,30 +717,41 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
   try {
     response = await chat(sharedHistory, model, mode, hasImage);
   } catch (e) {
-    console.error(`[${ws.sessionId}] Chat error:`, e.message);
-    ws.send(JSON.stringify({ type: 'error', message: `API error: ${e.message}` }));
-    ws.send(JSON.stringify({ type: 'done' }));
+    console.error(`[${sessionId}] Chat error:`, e.message);
+    pendingRequests.set(sessionId, { status: 'error', error: `API error: ${e.message}` });
+    sendToClient(sessionId, { type: 'error', message: `API error: ${e.message}` });
+    sendToClient(sessionId, { type: 'done' });
     return;
   }
-  console.log(`🧠 [${ws.sessionId}] ${Date.now() - startTime}ms: ${response.slice(0, 50)}...`);
+  console.log(`🧠 [${sessionId}] ${Date.now() - startTime}ms: ${response.slice(0, 50)}...`);
   
   // Append assistant response to shared session file
   appendToSessionSync('assistant', response);
   
-  // Send text
-  ws.send(JSON.stringify({ type: 'text', content: response }));
+  // Store response and try to send to client
+  const sent = sendToClient(sessionId, { type: 'text', content: response });
   
-  // TTS for voice mode
-  if (mode === 'voice') {
-    try {
-      const audio = await tts.synthesize(response);
-      ws.send(JSON.stringify({ type: 'audio', data: audio.toString('base64') }));
-    } catch (e) {
-      console.error('TTS error:', e.message);
+  if (sent) {
+    // Client connected - send response directly
+    if (mode === 'voice') {
+      try {
+        const audio = await tts.synthesize(response);
+        sendToClient(sessionId, { type: 'audio', data: audio.toString('base64') });
+      } catch (e) {
+        console.error('TTS error:', e.message);
+      }
     }
+    sendToClient(sessionId, { type: 'done' });
+    pendingRequests.delete(sessionId);
+  } else {
+    // Client disconnected - store response for later
+    console.log(`📦 [${sessionId}] Response stored for reconnection`);
+    pendingRequests.set(sessionId, { 
+      status: 'complete', 
+      response,
+      completedAt: Date.now()
+    });
   }
-  
-  ws.send(JSON.stringify({ type: 'done' }));
 }
 
 // Handle voice note (transcribe + summarize)
@@ -702,10 +813,7 @@ async function chat(history, model, mode, hasImage = false) {
     body.thinking = { type: 'enabled', budget_tokens: 2000 };
   }
 
-  // Add timeout for large requests (images can be slow)
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-  
+  // No timeout - let Claude take as long as needed
   try {
     const jsonBody = JSON.stringify(body);
     const bodySize = Buffer.byteLength(jsonBody);
@@ -718,10 +826,7 @@ async function chat(history, model, mode, hasImage = false) {
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
       },
       body: jsonBody,
-      signal: controller.signal,
     });
-
-    clearTimeout(timeout);
 
     if (!response.ok) {
       const err = await response.text();
@@ -732,11 +837,7 @@ async function chat(history, model, mode, hasImage = false) {
     const data = await response.json();
     return data.choices?.[0]?.message?.content || 'No response';
   } catch (e) {
-    clearTimeout(timeout);
     console.error('Chat fetch error:', e.message, e.cause || '');
-    if (e.name === 'AbortError') {
-      throw new Error('Request timed out (2 minutes)');
-    }
     throw new Error(`Chat failed: ${e.message}`);
   }
 }
