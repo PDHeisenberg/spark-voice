@@ -92,14 +92,22 @@ function updateSparkPillText() {
   }
 }
 
-// Show sessions popup on click - show immediately with cached data
-sparkStatusEl?.addEventListener('click', () => {
-  showSessionsPopup();
-  // Refresh in background
-  fetchActiveSessions().then(() => {
-    const existing = document.getElementById('sessions-popup');
-    if (existing) updateSessionsPopupContent(existing);
-  });
+// Toggle sessions popup on click
+sparkStatusEl?.addEventListener('click', (e) => {
+  e.stopPropagation(); // Prevent immediate re-close from document click listener
+  const existing = document.getElementById('sessions-popup');
+  if (existing) {
+    // Popup is open, close it
+    existing.remove();
+  } else {
+    // Popup is closed, open it
+    showSessionsPopup();
+    // Refresh in background
+    fetchActiveSessions().then(() => {
+      const popup = document.getElementById('sessions-popup');
+      if (popup) updateSessionsPopupContent(popup);
+    });
+  }
 });
 
 function getSessionDescription(s) {
