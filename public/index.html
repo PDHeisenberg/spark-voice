@@ -1068,28 +1068,33 @@
 
     #messages::-webkit-scrollbar { width: 0; }
 
-    /* PC Status Pill - left side, aligned with chat bubbles */
-    .status-pill {
+    /* Status Pills Container */
+    #status-pills {
       position: fixed;
       top: 16px;
       left: 16px;
-      height: 44px;
+      display: flex;
+      gap: 8px;
+      z-index: 20;
+    }
+
+    .status-pill {
+      height: 40px;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      padding: 0 14px;
+      padding: 0 12px;
       background: var(--glass);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--glass-border);
       box-shadow: 0 2px 12px var(--glass-shadow);
-      border-radius: 22px;
-      font-size: 12px;
-      font-weight: 600;
+      border-radius: 20px;
+      font-size: 14px;
       color: var(--text-secondary);
-      z-index: 20;
       transition: all 0.3s ease;
+      cursor: pointer;
     }
 
     .status-pill .status-dot {
@@ -1100,20 +1105,32 @@
       transition: background 0.3s ease, box-shadow 0.3s ease;
     }
 
+    /* Connected state - green */
     .status-pill.connected .status-dot {
       background: var(--green);
       box-shadow: 0 0 6px var(--green);
     }
 
-    .status-pill .status-text {
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    /* Connecting state - pulsating grey */
+    .status-pill.connecting .status-dot {
+      background: #888;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .status-pill .status-icon {
+      font-size: 16px;
+      line-height: 1;
     }
 
     /* Hide header buttons in voice/notes/chatfeed modes */
-    body.voice-mode .status-pill,
-    body.notes-mode .status-pill,
-    body.chatfeed-mode .status-pill,
+    body.voice-mode #status-pills,
+    body.notes-mode #status-pills,
+    body.chatfeed-mode #status-pills,
     body.voice-mode #theme-btn,
     body.notes-mode #theme-btn,
     body.chatfeed-mode #theme-btn,
@@ -1367,9 +1384,15 @@
 </head>
 <body>
   <!-- PC Status Pill -->
-  <div id="pc-status" class="status-pill" title="PC Status">
-    <span class="status-dot"></span>
-    <span class="status-text">PC</span>
+  <div id="status-pills">
+    <div id="spark-status" class="status-pill connecting" title="Clawdbot Gateway">
+      <span class="status-dot"></span>
+      <span class="status-icon">⚡</span>
+    </div>
+    <div id="pc-status" class="status-pill" title="PC Status">
+      <span class="status-dot"></span>
+      <span class="status-icon">🖥️</span>
+    </div>
   </div>
 
   <!-- Theme toggle button -->

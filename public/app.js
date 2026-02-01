@@ -28,6 +28,23 @@ const toastEl = document.getElementById('toast');
 const uploadBtn = document.getElementById('upload-btn');
 const fileInput = document.getElementById('file-input');
 const bottomEl = document.getElementById('bottom');
+const sparkStatusEl = document.getElementById('spark-status');
+
+// Update Spark gateway connection status pill
+function updateSparkStatus(state) {
+  if (!sparkStatusEl) return;
+  sparkStatusEl.classList.remove('connected', 'connecting');
+  if (state === 'connected') {
+    sparkStatusEl.classList.add('connected');
+    sparkStatusEl.title = 'Clawdbot Gateway: Connected';
+  } else if (state === 'connecting') {
+    sparkStatusEl.classList.add('connecting');
+    sparkStatusEl.title = 'Clawdbot Gateway: Connecting...';
+  } else {
+    // disconnected - no class, shows red
+    sparkStatusEl.title = 'Clawdbot Gateway: Disconnected';
+  }
+}
 const voiceBar = document.getElementById('voice-bar');
 const closeVoiceBtn = document.getElementById('close-voice-btn');
 const waveformEl = document.getElementById('waveform');
@@ -1097,25 +1114,26 @@ function connect() {
   }
   
   console.log('🔌 Connecting to:', wsUrl);
-  setStatus('Connecting...');
+  updateSparkStatus('connecting');
   try {
     ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       console.log('✅ Chat WebSocket connected');
-      setStatus('');
+      updateSparkStatus('connected');
     };
     ws.onclose = (e) => {
       console.log('🔌 Chat WebSocket closed:', e.code, e.reason);
-      setStatus('Disconnected');
+      updateSparkStatus('disconnected');
       setTimeout(connect, 2000);
     };
     ws.onerror = (e) => {
       console.error('❌ Chat WebSocket error:', e);
-      setStatus('Connection error');
+      updateSparkStatus('disconnected');
     };
     ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
   } catch (e) {
     console.error('❌ Failed to create WebSocket:', e);
+    updateSparkStatus('disconnected');
   }
 }
 
