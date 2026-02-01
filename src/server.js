@@ -817,10 +817,20 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
       
       if (ext === 'pdf') {
         console.log(`📄 [${sessionId}] Extracting PDF: ${fileData.filename}`);
-        extractedText = await extractPdfText(fileData.dataUrl);
+        try {
+          extractedText = await extractPdfText(fileData.dataUrl);
+        } catch (pdfError) {
+          console.error(`PDF extraction error:`, pdfError);
+          throw new Error(`Could not read PDF: ${pdfError.message.includes('Invalid') ? 'File appears corrupted' : pdfError.message}`);
+        }
       } else if (ext === 'docx' || ext === 'doc') {
-        console.log(`📄 [${sessionId}] Extracting DOCX: ${fileData.filename}`);
-        extractedText = await extractDocxText(fileData.dataUrl);
+        console.log(`📝 [${sessionId}] Extracting DOCX: ${fileData.filename}`);
+        try {
+          extractedText = await extractDocxText(fileData.dataUrl);
+        } catch (docxError) {
+          console.error(`DOCX extraction error:`, docxError);
+          throw new Error(`Could not read DOCX: ${docxError.message.includes('Invalid') ? 'File appears corrupted' : docxError.message}`);
+        }
       }
       
       // Truncate if too long (keep first 50k chars)
