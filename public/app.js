@@ -1449,55 +1449,121 @@ document.getElementById('articulations-btn')?.addEventListener('click', () => {
   textInput?.focus();
 });
 
-// Engineer Agent button
-document.getElementById('engineer-btn')?.addEventListener('click', () => {
-  const task = prompt('🔧 Engineer Agent\n\nDescribe the coding task:');
-  if (task && task.trim()) {
-    const engineerPrompt = `Spawn an engineer agent with these instructions:
-
-TASK: ${task.trim()}
-
-ENGINEER AGENT INSTRUCTIONS:
-- You are a skilled software engineer
-- Work in /home/heisenberg/clawd/spark-voice codebase
-- Read relevant files before making changes
-- Make minimal, focused changes
-- Test that code is syntactically correct
-- Commit each fix with descriptive message: "fix: [description]"
-- Report back with commit hash and summary of changes
-- If task has multiple parts, do them sequentially, one at a time
-
-Start working on the task now.`;
-    
-    showChatFeedPage();
-    send(engineerPrompt, 'chat');
-  }
+// Dev Team Agent button (Engineer + QA combined workflow)
+document.getElementById('devteam-btn')?.addEventListener('click', () => {
+  showDevTeamModal();
 });
 
-// QA Agent button
-document.getElementById('qa-btn')?.addEventListener('click', () => {
-  const scope = prompt('🔍 QA Review Agent\n\nWhat should be reviewed?\n(e.g., "recent commits", "whole codebase", "security")');
-  if (scope && scope.trim()) {
-    const qaPrompt = `Spawn a QA review agent with these instructions:
+function showDevTeamModal() {
+  // Create modal overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'devteam-modal';
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  `;
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background: var(--bg-card, #1a1a1a); border-radius: 16px;
+    padding: 24px; max-width: 500px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  `;
+  
+  modal.innerHTML = `
+    <h2 style="margin: 0 0 8px 0; font-size: 20px;">🛠️ Dev Team</h2>
+    <p style="margin: 0 0 16px 0; color: var(--text-muted, #888); font-size: 14px; line-height: 1.5;">
+      Engineer + QA working together. Engineer implements fixes one by one, 
+      QA reviews each commit. If QA rejects, Engineer fixes and resubmits. 
+      Continues until all tasks are approved.
+    </p>
+    <textarea id="devteam-task" placeholder="Describe the task or list of issues to fix..." 
+      style="width: 100%; height: 120px; padding: 12px; border-radius: 8px; 
+      background: var(--bg-input, #2a2a2a); color: var(--text-primary, #fff);
+      border: 1px solid var(--border, #333); font-size: 14px; resize: none;
+      font-family: inherit;"></textarea>
+    <div style="display: flex; gap: 12px; margin-top: 16px;">
+      <button id="devteam-cancel" style="flex: 1; padding: 12px; border-radius: 8px;
+        background: var(--bg-input, #2a2a2a); color: var(--text-primary, #fff);
+        border: 1px solid var(--border, #333); cursor: pointer; font-size: 14px;">
+        Cancel
+      </button>
+      <button id="devteam-start" style="flex: 2; padding: 12px; border-radius: 8px;
+        background: #4a9eff; color: #fff; border: none; cursor: pointer; 
+        font-size: 14px; font-weight: 600;">
+        🚀 Start Dev Team
+      </button>
+    </div>
+  `;
+  
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  
+  const taskInput = document.getElementById('devteam-task');
+  taskInput.focus();
+  
+  // Close on cancel or overlay click
+  document.getElementById('devteam-cancel').onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  
+  // Start dev team
+  document.getElementById('devteam-start').onclick = () => {
+    const task = taskInput.value.trim();
+    if (!task) {
+      taskInput.style.borderColor = '#ff4a4a';
+      return;
+    }
+    
+    overlay.remove();
+    
+    const devTeamPrompt = `You are a Dev Team coordinator. Run an Engineer + QA collaborative workflow.
 
-SCOPE: ${scope.trim()}
+TASK: ${task}
 
-QA AGENT INSTRUCTIONS:
-- You are a thorough QA engineer
-- Review code in /home/heisenberg/clawd/spark-voice
-- Check for: bugs, edge cases, memory leaks, security issues, code quality
-- For each issue found, note: severity, location, problem, suggested fix
-- Categorize issues: Critical, High, Medium, Low
-- Provide effort estimates for fixes
-- Generate a structured report
-- If reviewing commits, use git log and git diff
+WORKFLOW:
+1. First, create a backup branch: git checkout -b backup-[timestamp]
+2. Break task into discrete items if multiple issues
+3. For EACH item, do sequentially (not parallel):
+   
+   ENGINEER PHASE:
+   - Read relevant files in /home/heisenberg/clawd/spark-voice
+   - Implement the fix with minimal, focused changes
+   - Test syntax is correct
+   - Commit with message: "fix: [description]"
+   
+   QA PHASE:
+   - Review the commit for correctness, edge cases, regressions
+   - Check for bugs, memory leaks, code quality
+   - If APPROVED: Move to next item
+   - If REJECTED: Tell engineer what to fix, repeat engineer phase
 
-Start the review now.`;
+4. After ALL items approved, push to GitHub and provide summary
+
+RULES:
+- One item at a time, sequential not parallel
+- Engineer commits before QA reviews
+- QA must explicitly APPROVE or REJECT each fix
+- Keep user updated on progress
+
+OUTPUT FORMAT:
+After each item: "✅ [item] - APPROVED" or "🔄 [item] - Fixing QA feedback..."
+Final: Summary table of all commits + status
+
+Start now.`;
     
     showChatFeedPage();
-    send(qaPrompt, 'chat');
-  }
-});
+    send(devTeamPrompt, 'chat');
+  };
+  
+  // Enter to submit
+  taskInput.onkeydown = (e) => {
+    if (e.key === 'Enter' && e.metaKey) {
+      document.getElementById('devteam-start').click();
+    }
+  };
+}
 
 // Override send for articulations mode
 const originalSend = send;
