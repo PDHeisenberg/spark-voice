@@ -599,7 +599,55 @@ server.on('upgrade', (request, socket, head) => {
 const sessions = new Map();
 
 // Pending requests store - persists across reconnections
+// Map<sessionId, Array<{requestId, status, startTime, text, response?, error?}>>
 const pendingRequests = new Map();
+
+// Get or create pending queue for a session
+function getPendingQueue(sessionId) {
+  if (!pendingRequests.has(sessionId)) {
+    pendingRequests.set(sessionId, []);
+  }
+  return pendingRequests.get(sessionId);
+}
+
+// Add a new pending request to the queue
+function addPendingRequest(sessionId, text) {
+  const requestId = Math.random().toString(36).slice(2, 10);
+  const queue = getPendingQueue(sessionId);
+  queue.push({
+    requestId,
+    status: 'processing',
+    startTime: Date.now(),
+    text: text.slice(0, 100)
+  });
+  return requestId;
+}
+
+// Update a pending request by requestId
+function updatePendingRequest(sessionId, requestId, updates) {
+  const queue = pendingRequests.get(sessionId);
+  if (!queue) return false;
+  const request = queue.find(r => r.requestId === requestId);
+  if (request) {
+    Object.assign(request, updates);
+    return true;
+  }
+  return false;
+}
+
+// Remove a pending request by requestId
+function removePendingRequest(sessionId, requestId) {
+  const queue = pendingRequests.get(sessionId);
+  if (!queue) return;
+  const index = queue.findIndex(r => r.requestId === requestId);
+  if (index !== -1) {
+    queue.splice(index, 1);
+  }
+  // Clean up empty queues
+  if (queue.length === 0) {
+    pendingRequests.delete(sessionId);
+  }
+}
 
 // Get or create session
 function getOrCreateSession(sessionId) {
@@ -642,24 +690,30 @@ wss.on('connection', (ws, request) => {
   session.ws = ws;
   ws.sessionId = sessionId;
   
-  // Check for pending request results
-  const pending = pendingRequests.get(sessionId);
-  if (pending) {
-    if (pending.status === 'processing') {
-      // Still processing - tell client
+  // Check for pending request results (queue-based)
+  const pendingQueue = pendingRequests.get(sessionId);
+  if (pendingQueue && pendingQueue.length > 0) {
+    const hasProcessing = pendingQueue.some(r => r.status === 'processing');
+    const completedRequests = pendingQueue.filter(r => r.status === 'complete' || r.status === 'error');
+    
+    if (hasProcessing) {
+      // At least one still processing - tell client
       ws.send(JSON.stringify({ type: 'ready', sessionId, pending: true }));
       ws.send(JSON.stringify({ type: 'thinking' }));
-    } else if (pending.status === 'complete') {
-      // Response ready - send it
+    } else {
       ws.send(JSON.stringify({ type: 'ready', sessionId }));
-      ws.send(JSON.stringify({ type: 'text', content: pending.response }));
-      ws.send(JSON.stringify({ type: 'done' }));
-      pendingRequests.delete(sessionId);
-    } else if (pending.status === 'error') {
-      ws.send(JSON.stringify({ type: 'ready', sessionId }));
-      ws.send(JSON.stringify({ type: 'error', message: pending.error }));
-      ws.send(JSON.stringify({ type: 'done' }));
-      pendingRequests.delete(sessionId);
+    }
+    
+    // Send all completed/errored results
+    for (const req of completedRequests) {
+      if (req.status === 'complete') {
+        ws.send(JSON.stringify({ type: 'text', content: req.response }));
+        ws.send(JSON.stringify({ type: 'done' }));
+      } else if (req.status === 'error') {
+        ws.send(JSON.stringify({ type: 'error', message: req.error }));
+        ws.send(JSON.stringify({ type: 'done' }));
+      }
+      removePendingRequest(sessionId, req.requestId);
     }
   } else {
     ws.send(JSON.stringify({ type: 'ready', sessionId }));
@@ -730,11 +784,8 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
   console.log(`🎤 [${sessionId}] (${mode}) User: ${text.slice(0, 50)}...${hasImage ? ' [+image]' : ''}${hasFile ? ` [+${fileData.filename}]` : ''}`);
   
   // Mark request as pending - processing will continue even if client disconnects
-  pendingRequests.set(sessionId, { 
-    status: 'processing', 
-    startTime: Date.now(),
-    text: text.slice(0, 100)
-  });
+  // Uses queue to handle multiple rapid requests without overwriting
+  const requestId = addPendingRequest(sessionId, text);
   
   sendToClient(sessionId, { type: 'thinking' });
   
@@ -782,7 +833,7 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
     }
   } catch (e) {
     console.error(`[${sessionId}] File extraction error:`, e.message);
-    pendingRequests.set(sessionId, { status: 'error', error: `Failed to read file: ${e.message}` });
+    updatePendingRequest(sessionId, requestId, { status: 'error', error: `Failed to read file: ${e.message}` });
     sendToClient(sessionId, { type: 'error', message: `Failed to read file: ${e.message}` });
     sendToClient(sessionId, { type: 'done' });
     return;
@@ -801,7 +852,7 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
     response = await chat(sharedHistory, model, mode, hasImage);
   } catch (e) {
     console.error(`[${sessionId}] Chat error:`, e.message);
-    pendingRequests.set(sessionId, { status: 'error', error: `API error: ${e.message}` });
+    updatePendingRequest(sessionId, requestId, { status: 'error', error: `API error: ${e.message}` });
     sendToClient(sessionId, { type: 'error', message: `API error: ${e.message}` });
     sendToClient(sessionId, { type: 'done' });
     return;
@@ -825,11 +876,11 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
       }
     }
     sendToClient(sessionId, { type: 'done' });
-    pendingRequests.delete(sessionId);
+    removePendingRequest(sessionId, requestId);
   } else {
     // Client disconnected - store response for later
-    console.log(`📦 [${sessionId}] Response stored for reconnection`);
-    pendingRequests.set(sessionId, { 
+    console.log(`📦 [${sessionId}] Response stored for reconnection (request ${requestId})`);
+    updatePendingRequest(sessionId, requestId, { 
       status: 'complete', 
       response,
       completedAt: Date.now()
