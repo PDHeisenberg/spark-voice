@@ -598,6 +598,29 @@ server.on('upgrade', (request, socket, head) => {
 // Session store
 const sessions = new Map();
 
+// Periodic cleanup of stale sessions (every hour)
+setInterval(() => {
+  const now = Date.now();
+  const MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
+  let cleaned = 0;
+  
+  for (const [sessionId, session] of sessions.entries()) {
+    const lastActivity = session.lastActivity || session.createdAt || 0;
+    if (now - lastActivity > MAX_AGE) {
+      sessions.delete(sessionId);
+      // Also clean up pending requests for this session
+      if (pendingRequests.has(sessionId)) {
+        pendingRequests.delete(sessionId);
+      }
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    console.log(`🧹 Cleaned up ${cleaned} stale session(s)`);
+  }
+}, 60 * 60 * 1000); // Every hour
+
 // Pending requests store - persists across reconnections
 // Map<sessionId, Array<{requestId, status, startTime, text, response?, error?}>>
 const pendingRequests = new Map();
@@ -655,10 +678,13 @@ function getOrCreateSession(sessionId) {
     sessions.set(sessionId, {
       history: [],
       createdAt: Date.now(),
+      lastActivity: Date.now(),
       ws: null,
     });
   }
-  return sessions.get(sessionId);
+  const session = sessions.get(sessionId);
+  session.lastActivity = Date.now(); // Update on access
+  return session;
 }
 
 // Send to client if connected
