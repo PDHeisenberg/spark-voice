@@ -61,27 +61,34 @@ async function fetchActiveSessions() {
   }
 }
 
-// Update pill to show session count or thinking
+// Update pill to show session status
 function updateSparkPillText() {
   if (!sparkStatusEl) return;
   
-  // Find or create text span
-  let textSpan = sparkStatusEl.querySelector('.status-text');
-  if (!textSpan) {
-    textSpan = document.createElement('span');
-    textSpan.className = 'status-text';
-    sparkStatusEl.appendChild(textSpan);
+  // Find or create count badge
+  let countBadge = sparkStatusEl.querySelector('.session-count');
+  if (!countBadge) {
+    countBadge = document.createElement('span');
+    countBadge.className = 'session-count';
+    sparkStatusEl.appendChild(countBadge);
   }
   
-  if (isProcessing) {
-    textSpan.textContent = 'Thinking...';
-    sparkStatusEl.classList.add('expanded');
-  } else if (activeSessionsData.count > 1) {
-    textSpan.textContent = `${activeSessionsData.count} sessions`;
-    sparkStatusEl.classList.add('expanded');
+  // Count sub-agents (sessions that aren't main)
+  const subAgentCount = (activeSessionsData.sessions || []).filter(s => s.isSubagent).length;
+  
+  // Green outline when active (processing or has sessions)
+  if (isProcessing || activeSessionsData.count > 0) {
+    sparkStatusEl.classList.add('active');
   } else {
-    textSpan.textContent = '';
-    sparkStatusEl.classList.remove('expanded');
+    sparkStatusEl.classList.remove('active');
+  }
+  
+  // Show count only when sub-agents are running
+  if (subAgentCount > 0) {
+    countBadge.textContent = subAgentCount;
+    countBadge.style.display = 'flex';
+  } else {
+    countBadge.style.display = 'none';
   }
 }
 
