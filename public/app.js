@@ -1727,6 +1727,106 @@ Start now.`;
   };
 }
 
+// Researcher button (Deep research with Q&A scoping)
+document.getElementById('researcher-btn')?.addEventListener('click', () => {
+  showResearcherModal();
+});
+
+function showResearcherModal() {
+  // Create modal overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'researcher-modal';
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  `;
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background: var(--bg-card, #1a1a1a); border-radius: 16px;
+    padding: 24px; max-width: 500px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  `;
+  
+  modal.innerHTML = `
+    <h2 style="margin: 0 0 8px 0; font-size: 20px;">🔬 Deep Research</h2>
+    <p style="margin: 0 0 16px 0; color: var(--text-muted, #888); font-size: 14px; line-height: 1.5;">
+      I'll ask you some clarifying questions, then spawn a research agent that will:
+      • Search multiple sources (web, Reddit, Twitter/X, academic)
+      • Apply deep analysis (conjecture + criticism)
+      • Publish a comprehensive HTML report to parth-researchbot.netlify.app
+    </p>
+    <textarea id="researcher-topic" placeholder="What would you like me to research?
+e.g., 'AI chip competition between NVIDIA and AMD'
+      'Impact of Fed policy on emerging markets'
+      'Latest developments in fusion energy'..." 
+      style="width: 100%; height: 140px; padding: 12px; border-radius: 8px; 
+      background: var(--bg-input, #2a2a2a); color: var(--text-primary, #fff);
+      border: 1px solid var(--border, #333); font-size: 14px; resize: none;
+      font-family: inherit;"></textarea>
+    <div style="display: flex; gap: 12px; margin-top: 16px;">
+      <button id="researcher-cancel" style="flex: 1; padding: 12px; border-radius: 8px;
+        background: var(--bg-input, #2a2a2a); color: var(--text-primary, #fff);
+        border: 1px solid var(--border, #333); cursor: pointer; font-size: 14px;">
+        Cancel
+      </button>
+      <button id="researcher-start" style="flex: 2; padding: 12px; border-radius: 8px;
+        background: #4a9eff; color: #fff; border: none; cursor: pointer; 
+        font-size: 14px; font-weight: 600;">
+        🚀 Start Research
+      </button>
+    </div>
+  `;
+  
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  
+  const topicInput = document.getElementById('researcher-topic');
+  topicInput.focus();
+  
+  // Close on cancel or overlay click
+  document.getElementById('researcher-cancel').onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  
+  // Start research Q&A
+  document.getElementById('researcher-start').onclick = () => {
+    const topic = topicInput.value.trim();
+    if (!topic) {
+      topicInput.style.borderColor = '#ff4a4a';
+      return;
+    }
+    
+    overlay.remove();
+    
+    // Send to main agent for Q&A scoping
+    const researchRequest = `🔬 RESEARCH REQUEST
+
+TOPIC: ${topic}
+
+Please ask me clarifying questions to understand:
+- Specific angle/focus area
+- Key questions to answer
+- Depth vs breadth preference
+- Timeframe (recent vs historical)
+- Target audience (technical vs general)
+- Sources to prioritize or avoid
+
+After I answer, spawn a research subagent with the full context.`;
+    
+    showChatFeedPage();
+    send(researchRequest, 'chat');
+  };
+  
+  // Enter to submit
+  topicInput.onkeydown = (e) => {
+    if (e.key === 'Enter' && e.metaKey) {
+      document.getElementById('researcher-start').click();
+    }
+  };
+}
+
 // Override send for articulations mode
 const originalSend = send;
 send = function(text, sendMode) {
