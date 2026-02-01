@@ -29,6 +29,7 @@ const uploadBtn = document.getElementById('upload-btn');
 const fileInput = document.getElementById('file-input');
 const bottomEl = document.getElementById('bottom');
 const sparkStatusEl = document.getElementById('spark-status');
+let activeSessionsData = { count: 0, thinking: false, sessions: [] };
 
 // Update Spark gateway connection status pill
 function updateSparkStatus(state) {
@@ -37,6 +38,8 @@ function updateSparkStatus(state) {
   if (state === 'connected') {
     sparkStatusEl.classList.add('connected');
     sparkStatusEl.title = 'Clawdbot Gateway: Connected';
+    // Fetch sessions on connect
+    fetchActiveSessions();
   } else if (state === 'connecting') {
     sparkStatusEl.classList.add('connecting');
     sparkStatusEl.title = 'Clawdbot Gateway: Connecting...';
@@ -44,6 +47,105 @@ function updateSparkStatus(state) {
     // disconnected - no class, shows red
     sparkStatusEl.title = 'Clawdbot Gateway: Disconnected';
   }
+}
+
+// Fetch active sessions from gateway
+async function fetchActiveSessions() {
+  try {
+    const res = await fetch('/api/active-sessions');
+    const data = await res.json();
+    activeSessionsData = data;
+    updateSparkPillText();
+  } catch (e) {
+    console.error('Failed to fetch active sessions:', e);
+  }
+}
+
+// Update pill to show session count or thinking
+function updateSparkPillText() {
+  if (!sparkStatusEl) return;
+  
+  // Find or create text span
+  let textSpan = sparkStatusEl.querySelector('.status-text');
+  if (!textSpan) {
+    textSpan = document.createElement('span');
+    textSpan.className = 'status-text';
+    sparkStatusEl.appendChild(textSpan);
+  }
+  
+  if (isProcessing) {
+    textSpan.textContent = 'Thinking...';
+    sparkStatusEl.classList.add('expanded');
+  } else if (activeSessionsData.count > 1) {
+    textSpan.textContent = `${activeSessionsData.count} sessions`;
+    sparkStatusEl.classList.add('expanded');
+  } else {
+    textSpan.textContent = '';
+    sparkStatusEl.classList.remove('expanded');
+  }
+}
+
+// Show sessions popup on click
+sparkStatusEl?.addEventListener('click', async () => {
+  await fetchActiveSessions();
+  showSessionsPopup();
+});
+
+function showSessionsPopup() {
+  // Remove existing popup
+  document.getElementById('sessions-popup')?.remove();
+  
+  const popup = document.createElement('div');
+  popup.id = 'sessions-popup';
+  popup.style.cssText = `
+    position: fixed; top: 70px; left: 16px;
+    background: var(--bg-card, #1a1a1a); border-radius: 12px;
+    padding: 16px; min-width: 280px; max-width: 350px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    border: 1px solid var(--glass-border);
+    z-index: 1000;
+  `;
+  
+  const sessions = activeSessionsData.sessions || [];
+  
+  if (sessions.length === 0) {
+    popup.innerHTML = `
+      <div style="color: var(--text-muted); font-size: 14px;">
+        No active sessions
+      </div>
+    `;
+  } else {
+    popup.innerHTML = `
+      <div style="font-weight: 600; margin-bottom: 12px; font-size: 14px;">
+        Active Sessions (${sessions.length})
+      </div>
+      ${sessions.map(s => `
+        <div style="padding: 10px; background: var(--bg-input, #2a2a2a); 
+          border-radius: 8px; margin-bottom: 8px;">
+          <div style="font-weight: 500; font-size: 13px; margin-bottom: 4px;">
+            ${s.isMain ? '⚡' : s.isSubagent ? '🔧' : '📝'} ${s.label}
+          </div>
+          ${s.lastMessage ? `
+            <div style="font-size: 12px; color: var(--text-muted); 
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${s.lastMessage}
+            </div>
+          ` : ''}
+        </div>
+      `).join('')}
+    `;
+  }
+  
+  document.body.appendChild(popup);
+  
+  // Close on click outside
+  const closePopup = (e) => {
+    if (!popup.contains(e.target) && e.target !== sparkStatusEl) {
+      popup.remove();
+      document.removeEventListener('click', closePopup);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closePopup), 10);
 }
 const voiceBar = document.getElementById('voice-bar');
 const closeVoiceBtn = document.getElementById('close-voice-btn');
@@ -1143,6 +1245,7 @@ function send(text, sendMode) {
     return;
   }
   isProcessing = true;
+  updateSparkPillText();
   addMsg(text, 'user');
   showThinking();
   setStatus('Sending...');
@@ -1190,6 +1293,8 @@ function handle(data) {
     case 'done':
       isProcessing = false;
       setStatus('');
+      updateSparkPillText();
+      fetchActiveSessions(); // Refresh sessions after response
       if (mode === 'voice' && !isListening) startVoice();
       break;
     case 'error':
@@ -1197,6 +1302,8 @@ function handle(data) {
       toast(data.message || 'Error', true);
       isProcessing = false;
       setStatus('');
+      updateSparkPillText();
+      fetchActiveSessions();
       break;
   }
 }
