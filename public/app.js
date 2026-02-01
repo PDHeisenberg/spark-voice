@@ -307,8 +307,11 @@ function playWaitingSound() {
 }
 
 function playThinkingPulse() {
+  let ctx = null;
   try {
-    const { ctx, buffer } = createThinkingSound();
+    const result = createThinkingSound();
+    ctx = result.ctx;
+    const buffer = result.buffer;
     const source = ctx.createBufferSource();
     const gain = ctx.createGain();
     
@@ -327,6 +330,10 @@ function playThinkingPulse() {
     };
   } catch (e) {
     console.error('Thinking sound error:', e);
+    // Close context on error to prevent memory leak
+    if (ctx && ctx.state !== 'closed') {
+      ctx.close().catch(() => {});
+    }
   }
 }
 
@@ -451,6 +458,7 @@ async function playAudioQueueTTS() {
   // If we have accumulated audio, play it
   if (ttsAudioBuffer.length > 0) {
     isPlaying = true;
+    let ctx = null;
     
     try {
       // Combine all base64 chunks
@@ -472,7 +480,7 @@ async function playAudioQueueTTS() {
       }
       
       // Create audio context and play
-      const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
       
@@ -496,6 +504,10 @@ async function playAudioQueueTTS() {
       
     } catch (e) {
       console.error('TTS playback error:', e);
+      // Close context on error to prevent memory leak
+      if (ctx && ctx.state !== 'closed') {
+        ctx.close().catch(() => {});
+      }
       // Still notify server even on error
       if (hybridWs && hybridWs.readyState === WebSocket.OPEN) {
         hybridWs.send(JSON.stringify({ type: 'audio_playback_ended' }));
