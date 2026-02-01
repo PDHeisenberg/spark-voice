@@ -1079,29 +1079,34 @@
     }
 
     .status-pill {
-      height: 40px;
+      width: 44px;
+      height: 44px;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      padding: 0 12px;
+      gap: 0;
+      padding: 0;
       background: var(--glass);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--glass-border);
       box-shadow: 0 2px 12px var(--glass-shadow);
-      border-radius: 20px;
-      font-size: 14px;
+      border-radius: 50%;
       color: var(--text-secondary);
       transition: all 0.3s ease;
       cursor: pointer;
+      position: relative;
     }
 
     .status-pill .status-dot {
-      width: 8px;
-      height: 8px;
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: var(--red);
+      border: 2px solid var(--bg-primary);
       transition: background 0.3s ease, box-shadow 0.3s ease;
     }
 
@@ -1123,9 +1128,9 @@
     }
 
     .status-pill .status-icon {
-      width: 16px;
-      height: 16px;
-      opacity: 0.7;
+      width: 22px;
+      height: 22px;
+      opacity: 0.8;
     }
 
     /* Hide header buttons in voice/notes/chatfeed modes */
