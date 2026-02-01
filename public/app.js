@@ -85,27 +85,42 @@ function updateSparkPillText() {
   }
 }
 
-// Show sessions popup on click
-sparkStatusEl?.addEventListener('click', async () => {
-  await fetchActiveSessions();
+// Show sessions popup on click - show immediately with cached data
+sparkStatusEl?.addEventListener('click', () => {
   showSessionsPopup();
+  // Refresh in background
+  fetchActiveSessions().then(() => {
+    const existing = document.getElementById('sessions-popup');
+    if (existing) updateSessionsPopupContent(existing);
+  });
 });
 
-function showSessionsPopup() {
-  // Remove existing popup
-  document.getElementById('sessions-popup')?.remove();
-  
-  const popup = document.createElement('div');
-  popup.id = 'sessions-popup';
-  popup.style.cssText = `
-    position: fixed; top: 70px; left: 16px;
-    background: var(--bg-card, #1a1a1a); border-radius: 12px;
-    padding: 16px; min-width: 280px; max-width: 350px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-    border: 1px solid var(--glass-border);
-    z-index: 1000;
-  `;
-  
+function getSessionDescription(s) {
+  if (s.isMain) {
+    return isProcessing ? 'Processing your request...' : 'Ready';
+  }
+  if (s.isSubagent) {
+    // Extract task from label
+    if (s.label?.includes('engineer')) return 'Engineering task';
+    if (s.label?.includes('qa')) return 'QA review';
+    if (s.label?.includes('dev')) return 'Dev team workflow';
+    return 'Background task';
+  }
+  return 'Active';
+}
+
+function getSessionIcon(s) {
+  // SVG icons instead of emojis
+  if (s.isMain) {
+    return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3L4 14h7v7l9-11h-7V3z"/></svg>`;
+  }
+  if (s.isSubagent) {
+    return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>`;
+  }
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`;
+}
+
+function updateSessionsPopupContent(popup) {
   const sessions = activeSessionsData.sessions || [];
   
   if (sessions.length === 0) {
@@ -116,31 +131,48 @@ function showSessionsPopup() {
     `;
   } else {
     popup.innerHTML = `
-      <div style="font-weight: 600; margin-bottom: 12px; font-size: 14px;">
-        Active Sessions (${sessions.length})
+      <div style="font-weight: 600; margin-bottom: 12px; font-size: 14px; color: var(--text-primary);">
+        Active Sessions
       </div>
       ${sessions.map(s => `
         <div style="padding: 10px; background: var(--bg-input, #2a2a2a); 
-          border-radius: 8px; margin-bottom: 8px;">
-          <div style="font-weight: 500; font-size: 13px; margin-bottom: 4px;">
-            ${s.isMain ? '⚡' : s.isSubagent ? '🔧' : '📝'} ${s.label}
-          </div>
-          ${s.lastMessage ? `
-            <div style="font-size: 12px; color: var(--text-muted); 
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${s.lastMessage}
+          border-radius: 8px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px;">
+          <div style="opacity: 0.6; margin-top: 2px;">${getSessionIcon(s)}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 500; font-size: 13px; color: var(--text-primary);">
+              ${s.isMain ? 'Main Session' : s.label || 'Sub-agent'}
             </div>
-          ` : ''}
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              ${getSessionDescription(s)}
+            </div>
+          </div>
         </div>
       `).join('')}
     `;
   }
+}
+
+function showSessionsPopup() {
+  // Remove existing popup
+  document.getElementById('sessions-popup')?.remove();
   
+  const popup = document.createElement('div');
+  popup.id = 'sessions-popup';
+  popup.style.cssText = `
+    position: fixed; top: 70px; left: 16px;
+    background: var(--bg-card, #1a1a1a); border-radius: 12px;
+    padding: 16px; min-width: 260px; max-width: 320px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    border: 1px solid var(--glass-border);
+    z-index: 1000;
+  `;
+  
+  updateSessionsPopupContent(popup);
   document.body.appendChild(popup);
   
   // Close on click outside
   const closePopup = (e) => {
-    if (!popup.contains(e.target) && e.target !== sparkStatusEl) {
+    if (!popup.contains(e.target) && !sparkStatusEl.contains(e.target)) {
       popup.remove();
       document.removeEventListener('click', closePopup);
     }
