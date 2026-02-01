@@ -173,10 +173,10 @@ function showSessionsPopup() {
   popup.id = 'sessions-popup';
   popup.style.cssText = `
     position: fixed; top: 70px; left: 16px;
-    background: var(--glass); border-radius: 12px;
+    background: var(--bg); border-radius: 12px;
     padding: 16px; min-width: 260px; max-width: 320px;
-    box-shadow: 0 10px 40px var(--glass-shadow);
-    border: 1px solid var(--glass-border);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    border: 1px solid var(--input-border);
     z-index: 1000;
   `;
   
