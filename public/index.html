@@ -503,7 +503,7 @@
       background: var(--glass);
       border: 1px solid var(--glass-border);
       box-shadow: 0 2px 8px var(--glass-shadow);
-      border-radius: 20px;
+      border-radius: 16px;
       padding: 10px 14px;
       color: var(--text);
       font-size: 14px;
@@ -512,8 +512,9 @@
       transition: all 0.2s;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      white-space: nowrap;
+      gap: 10px;
+      white-space: normal;
+      max-width: 100%;
     }
 
     .shortcut:active {
@@ -535,29 +536,32 @@
     }
 
     .shortcut .shortcut-icon {
-      width: 18px;
-      height: 18px;
+      width: 22px;
+      height: 22px;
       flex-shrink: 0;
-      stroke: var(--text-secondary);
+      stroke: var(--accent);
       stroke-width: 1.8;
       fill: none;
     }
 
     .shortcut .shortcut-content {
       display: flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 4px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
       text-align: left;
     }
 
     .shortcut .shortcut-title {
       font-weight: 500;
       color: var(--text);
+      line-height: 1.2;
     }
 
     .shortcut .shortcut-sub {
-      display: none; /* Hidden for chip style */
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.2;
     }
 
     /* Bottom nav - three separate elements */
