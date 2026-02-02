@@ -2013,6 +2013,100 @@ document.getElementById('articulations-btn')?.addEventListener('click', () => {
 });
 
 // ============================================================================
+// ACTIVE SUBAGENT SESSION TRACKING
+// ============================================================================
+
+// Track active subagent sessions by mode
+const activeSubagentSessions = {
+  'dev-mode': null,
+  'research-mode': null,
+  'plan-mode': null
+};
+
+// Map button IDs to session labels
+const buttonToSessionLabel = {
+  'devteam-btn': 'dev-mode',
+  'researcher-btn': 'research-mode',
+  'plan-btn': 'plan-mode'
+};
+
+// Check for active subagent sessions
+async function checkActiveSubagentSessions() {
+  try {
+    const response = await fetch('/api/active-sessions');
+    const data = await response.json();
+    
+    // Reset all to null
+    activeSubagentSessions['dev-mode'] = null;
+    activeSubagentSessions['research-mode'] = null;
+    activeSubagentSessions['plan-mode'] = null;
+    
+    // Find matching subagent sessions
+    for (const session of (data.sessions || [])) {
+      if (session.label === 'dev-mode' || session.key?.includes('dev-mode')) {
+        activeSubagentSessions['dev-mode'] = session;
+      } else if (session.label === 'research-mode' || session.key?.includes('research-mode')) {
+        activeSubagentSessions['research-mode'] = session;
+      } else if (session.label === 'plan-mode' || session.key?.includes('plan-mode')) {
+        activeSubagentSessions['plan-mode'] = session;
+      }
+    }
+    
+    // Update button visual states
+    updateSubagentButtonStates();
+  } catch (e) {
+    console.error('Failed to check active sessions:', e);
+  }
+}
+
+// Update button visual states based on active sessions
+function updateSubagentButtonStates() {
+  for (const [btnId, label] of Object.entries(buttonToSessionLabel)) {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      const isActive = activeSubagentSessions[label] !== null;
+      btn.classList.toggle('session-active', isActive);
+      
+      // Update subtitle to show status
+      const subEl = btn.querySelector('.shortcut-sub');
+      if (subEl) {
+        if (isActive) {
+          const originalText = subEl.dataset.originalText || subEl.textContent;
+          subEl.dataset.originalText = originalText;
+          subEl.textContent = '● Session active';
+        } else if (subEl.dataset.originalText) {
+          subEl.textContent = subEl.dataset.originalText;
+        }
+      }
+    }
+  }
+}
+
+// Get active session for a mode
+function getActiveSession(mode) {
+  return activeSubagentSessions[mode];
+}
+
+// Check on load and every 10 seconds
+checkActiveSubagentSessions();
+let subagentPollInterval = setInterval(checkActiveSubagentSessions, 10000);
+
+// Pause polling when page is hidden
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (subagentPollInterval) {
+      clearInterval(subagentPollInterval);
+      subagentPollInterval = null;
+    }
+  } else {
+    if (!subagentPollInterval) {
+      checkActiveSubagentSessions();
+      subagentPollInterval = setInterval(checkActiveSubagentSessions, 10000);
+    }
+  }
+});
+
+// ============================================================================
 // BOTTOM SHEET SYSTEM
 // ============================================================================
 

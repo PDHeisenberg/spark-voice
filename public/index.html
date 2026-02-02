@@ -519,6 +519,19 @@
       background: var(--shortcut-bg);
     }
 
+    .shortcut.session-active {
+      border-color: #22c55e;
+      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3), 0 2px 8px var(--glass-shadow);
+    }
+
+    .shortcut.session-active .shortcut-icon {
+      stroke: #22c55e;
+    }
+
+    .shortcut.session-active .shortcut-sub {
+      color: #22c55e;
+    }
+
     .shortcut .shortcut-icon {
       width: 20px;
       height: 20px;
@@ -1901,6 +1914,6 @@
       </svg>
     </button>
   </div>
-  <script type="module" src="app.js?v=118"></script>
+  <script type="module" src="app.js?v=119"></script>
 </body>
 </html>
