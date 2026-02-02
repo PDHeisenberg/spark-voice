@@ -1644,6 +1644,41 @@
       cursor: not-allowed;
     }
     
+    /* Active session button */
+    .bottom-sheet-active-session {
+      width: 100%;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .bottom-sheet-active-session:active {
+      transform: scale(0.98);
+      background: rgba(34, 197, 94, 0.25);
+    }
+    
+    .bottom-sheet-active-session .active-dot {
+      font-size: 10px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    
     /* Keyboard awareness - move sheet up when keyboard opens */
     @supports (height: 100dvh) {
       .bottom-sheet {
@@ -1914,6 +1949,6 @@
       </svg>
     </button>
   </div>
-  <script type="module" src="app.js?v=119"></script>
+  <script type="module" src="app.js?v=120"></script>
 </body>
 </html>

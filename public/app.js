@@ -2119,9 +2119,11 @@ document.addEventListener('visibilitychange', () => {
  * @param {string} config.placeholder - Input placeholder
  * @param {string} config.submitText - Submit button text
  * @param {Function} config.onSubmit - Callback with input value
+ * @param {Object} config.activeSession - Active session object (optional)
+ * @param {Function} config.onViewSession - Callback to view active session (optional)
  * @returns {Object} - { close: Function } to programmatically close
  */
-function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onSubmit }) {
+function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onSubmit, activeSession, onViewSession }) {
   // Create overlay
   const overlay = document.createElement('div');
   overlay.className = 'bottom-sheet-overlay';
@@ -2129,6 +2131,14 @@ function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onS
   // Create sheet
   const sheet = document.createElement('div');
   sheet.className = 'bottom-sheet';
+  
+  // Build active session button HTML if session exists
+  const activeSessionHtml = activeSession ? `
+    <button class="bottom-sheet-active-session">
+      <span class="active-dot">●</span>
+      View Active Session
+    </button>
+  ` : '';
   
   sheet.innerHTML = `
     <div class="bottom-sheet-handle"></div>
@@ -2139,6 +2149,7 @@ function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onS
         <p class="bottom-sheet-subtitle">${subtitle}</p>
       </div>
     </div>
+    ${activeSessionHtml}
     <textarea class="bottom-sheet-input" placeholder="${placeholder}" rows="1"></textarea>
     <button class="bottom-sheet-submit">${submitText}</button>
   `;
@@ -2149,6 +2160,7 @@ function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onS
   const input = sheet.querySelector('.bottom-sheet-input');
   const submitBtn = sheet.querySelector('.bottom-sheet-submit');
   const handle = sheet.querySelector('.bottom-sheet-handle');
+  const activeSessionBtn = sheet.querySelector('.bottom-sheet-active-session');
   
   // Close function with animation
   function close() {
@@ -2254,6 +2266,14 @@ function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onS
   
   submitBtn.addEventListener('click', handleSubmit);
   
+  // Handle view active session button click
+  if (activeSessionBtn && onViewSession) {
+    activeSessionBtn.addEventListener('click', () => {
+      close();
+      onViewSession(activeSession);
+    });
+  }
+  
   // Enter to submit (Cmd/Ctrl+Enter for multi-line)
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -2271,18 +2291,40 @@ function createBottomSheet({ icon, title, subtitle, placeholder, submitText, onS
   return { close };
 }
 
+// View active subagent session - shows messages from that session
+function viewActiveSession(session) {
+  if (!session) return;
+  
+  showChatFeedPage();
+  
+  // Show a system message indicating we're viewing a subagent session
+  const systemMsg = document.createElement('div');
+  systemMsg.className = 'msg system';
+  systemMsg.innerHTML = `
+    <strong>Viewing ${session.label || 'subagent'} session</strong><br>
+    <small style="opacity: 0.7">Session key: ${session.key}</small>
+  `;
+  messagesEl.appendChild(systemMsg);
+  
+  // Send a command to get the session's recent activity
+  send(`Show me the recent activity from the ${session.label || 'subagent'} session (key: ${session.key})`, 'chat');
+}
+
 // Dev Mode button (spawns isolated dev subagent)
 document.getElementById('devteam-btn')?.addEventListener('click', () => {
   showDevModeModal();
 });
 
 function showDevModeModal() {
+  const activeSession = getActiveSession('dev-mode');
   createBottomSheet({
     icon: '👨‍💻',
     title: 'Dev Mode',
-    subtitle: 'Isolated coding session',
+    subtitle: activeSession ? '● Session running' : 'Isolated coding session',
     placeholder: 'Describe the task or issues to fix...',
-    submitText: 'Start Dev Mode',
+    submitText: activeSession ? 'Start New Task' : 'Start Dev Mode',
+    activeSession,
+    onViewSession: viewActiveSession,
     onSubmit: (task) => {
       showChatFeedPage();
       send(`/dev ${task}`, 'chat');
@@ -2296,12 +2338,15 @@ document.getElementById('researcher-btn')?.addEventListener('click', () => {
 });
 
 function showResearchModeModal() {
+  const activeSession = getActiveSession('research-mode');
   createBottomSheet({
     icon: '🔬',
     title: 'Research Mode',
-    subtitle: 'Deep research subagent',
+    subtitle: activeSession ? '● Session running' : 'Deep research subagent',
     placeholder: 'What would you like me to research?',
-    submitText: 'Start Research',
+    submitText: activeSession ? 'Start New Research' : 'Start Research',
+    activeSession,
+    onViewSession: viewActiveSession,
     onSubmit: (topic) => {
       showChatFeedPage();
       send(`/research ${topic}`, 'chat');
@@ -2315,12 +2360,15 @@ document.getElementById('plan-btn')?.addEventListener('click', () => {
 });
 
 function showPlanModeModal() {
+  const activeSession = getActiveSession('plan-mode');
   createBottomSheet({
     icon: '📋',
     title: 'Plan Mode',
-    subtitle: 'Create detailed specs',
+    subtitle: activeSession ? '● Session running' : 'Create detailed specs',
     placeholder: 'What do you want to build?',
-    submitText: 'Start Planning',
+    submitText: activeSession ? 'Start New Plan' : 'Start Planning',
+    activeSession,
+    onViewSession: viewActiveSession,
     onSubmit: (topic) => {
       const planRequest = `/plan ${topic}`;
       showChatFeedPage();
