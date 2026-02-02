@@ -1977,12 +1977,34 @@ pcStatusEl?.addEventListener('click', async () => {
   }
 });
 
-// Keyboard detection
+// Keyboard detection and fixed input handling
 if (window.visualViewport) {
   let initialHeight = window.visualViewport.height;
+  const bottomEl = document.getElementById('bottom');
+  
   window.visualViewport.addEventListener('resize', () => {
     const diff = initialHeight - window.visualViewport.height;
-    document.body.classList.toggle('keyboard-open', diff > 150);
+    const isKeyboardOpen = diff > 150;
+    document.body.classList.toggle('keyboard-open', isKeyboardOpen);
+    
+    // Fix: Adjust bottom bar position based on visual viewport when keyboard is open
+    // This ensures the input stays above the keyboard on iOS Safari
+    if (bottomEl && isKeyboardOpen) {
+      // Calculate the offset from the bottom of the layout viewport to the bottom of the visual viewport
+      const offsetBottom = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      bottomEl.style.bottom = Math.max(0, offsetBottom) + 'px';
+    } else if (bottomEl) {
+      bottomEl.style.bottom = '0';
+    }
+  });
+  
+  // Also handle scroll events on visual viewport (iOS Safari keyboard pan)
+  window.visualViewport.addEventListener('scroll', () => {
+    if (bottomEl && document.body.classList.contains('keyboard-open')) {
+      // Keep bottom bar anchored to visual viewport bottom
+      const offsetBottom = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      bottomEl.style.bottom = Math.max(0, offsetBottom) + 'px';
+    }
   });
 }
 
