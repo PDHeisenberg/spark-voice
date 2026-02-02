@@ -7,6 +7,10 @@
  * 
  * v83 - Session Unification: Spark Portal ↔ WhatsApp share same context
  * v84 - Fix scroll lock: only auto-scroll to bottom if user is near bottom
+ * v85 - TRUE UNIFICATION: ALL messages route through Clawdbot main session (same as WhatsApp)
+ * v86 - Fix duplicate responses: CLI responses added to hash set, sync skips them
+ * v87 - Better dedup: track processing clients, sync skips assistant msgs for them
+ * v88 - PROPER FIX: Only sync user + pure-text assistant messages, skip toolCall/toolResult/thinking
  */
 
 import { WebSocketServer } from 'ws';
@@ -38,6 +42,108 @@ const UNIFIED_HOOK_TOKEN = 'spark-portal-hook-token-2026';
 const UNIFIED_SESSION_KEY = 'agent:main:main';
 
 console.log(`🔗 Session Unification: ${UNIFIED_SESSION ? 'ENABLED (shared with WhatsApp)' : 'DISABLED (isolated)'}`);
+
+// ============================================================================
+// MESSAGE QUEUE - Queue messages when gateway/WhatsApp is connecting
+// ============================================================================
+const messageQueue = [];
+let gatewayConnecting = false;
+let queueDrainTimer = null;
+const QUEUE_CHECK_INTERVAL = 3000; // Check every 3 seconds
+const MAX_QUEUE_SIZE = 50;
+
+// Check if gateway/WhatsApp is ready
+async function checkGatewayStatus() {
+  try {
+    const response = await fetch(`${UNIFIED_GATEWAY_URL}/api/status`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${UNIFIED_HOOK_TOKEN}` },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!response.ok) return { ready: false, connecting: false };
+    const status = await response.json();
+    // Check WhatsApp channel status
+    const whatsapp = status.channels?.whatsapp;
+    if (!whatsapp) return { ready: false, connecting: false };
+    const connected = whatsapp.connected === true;
+    const running = whatsapp.running === true;
+    return { ready: connected, connecting: running && !connected };
+  } catch (e) {
+    return { ready: false, connecting: false };
+  }
+}
+
+// Queue a message for later delivery
+function queueMessage(ws, sessionId, text, resolve) {
+  if (messageQueue.length >= MAX_QUEUE_SIZE) {
+    console.warn(`⚠️ Message queue full (${MAX_QUEUE_SIZE}), rejecting message`);
+    return false;
+  }
+  messageQueue.push({ ws, sessionId, text, resolve, queuedAt: Date.now() });
+  console.log(`📥 [${sessionId}] Message queued (${messageQueue.length} pending)`);
+  return true;
+}
+
+// Drain queued messages when connection is restored
+async function drainMessageQueue() {
+  if (messageQueue.length === 0) return;
+  
+  const status = await checkGatewayStatus();
+  if (!status.ready) {
+    if (status.connecting) {
+      console.log(`⏳ Gateway connecting, ${messageQueue.length} messages queued...`);
+    }
+    return;
+  }
+  
+  console.log(`✅ Gateway ready, draining ${messageQueue.length} queued messages...`);
+  gatewayConnecting = false;
+  
+  // Process queue in order
+  while (messageQueue.length > 0) {
+    const item = messageQueue.shift();
+    const waitTime = Date.now() - item.queuedAt;
+    console.log(`📤 [${item.sessionId}] Processing queued message (waited ${Math.round(waitTime/1000)}s)`);
+    
+    try {
+      // Re-attempt the message
+      await routeThroughClawdbot(item.ws, item.sessionId, item.text, true);
+      if (item.resolve) item.resolve(true);
+    } catch (e) {
+      console.error(`❌ [${item.sessionId}] Failed to process queued message:`, e.message);
+      sendToClient(item.sessionId, { type: 'error', message: `Queued message failed: ${e.message}` });
+      sendToClient(item.sessionId, { type: 'done' });
+      if (item.resolve) item.resolve(false);
+    }
+  }
+  
+  // Stop the drain timer if queue is empty
+  if (messageQueue.length === 0 && queueDrainTimer) {
+    clearInterval(queueDrainTimer);
+    queueDrainTimer = null;
+  }
+}
+
+// Start queue drain timer
+function startQueueDrainTimer() {
+  if (queueDrainTimer) return;
+  queueDrainTimer = setInterval(drainMessageQueue, QUEUE_CHECK_INTERVAL);
+  console.log(`⏱️ Queue drain timer started`);
+}
+
+// Detect if error indicates connecting state (vs permanent failure)
+function isConnectingError(errorText) {
+  const connectingPatterns = [
+    /no active.*whatsapp.*listener/i,
+    /no active.*web.*listener/i,
+    /whatsapp.*not.*connected/i,
+    /whatsapp.*connecting/i,
+    /whatsapp.*reconnect/i,
+    /web.*socket.*closed/i,
+    /gateway.*connecting/i
+  ];
+  return connectingPatterns.some(p => p.test(errorText));
+}
 
 // Send message to main session via gateway webhook
 async function sendToMainSession(text, source = 'Spark Portal') {
@@ -775,8 +881,11 @@ const sessions = new Map();
 // UNIFIED SESSION - Real-time sync polling
 // ============================================================================
 const portalClients = new Set(); // Track all connected portal WebSocket clients
-let lastSyncTimestamp = Date.now();
+const processingClients = new Set(); // Clients waiting for CLI response - don't sync assistant msgs to them
+// Initialize from last message in session file, not Date.now() (avoids missing recent messages)
+let lastSyncTimestamp = 0; // Will be set from session file on first poll
 let lastSyncedMessageId = null;
+let syncInitialized = false;
 
 // Track recently sent message IDs to avoid duplicate sync (by content hash)
 const recentlySentHashes = new Set();
@@ -806,6 +915,24 @@ async function pollForSync() {
     const content = readFileSync(sessionPath, 'utf8');
     const lines = content.trim().split('\n').filter(l => l);
     
+    // Initialize lastSyncTimestamp from the last message on first poll
+    // This ensures we don't re-sync old messages but also don't miss recent ones
+    if (!syncInitialized) {
+      syncInitialized = true;
+      const lastLines = lines.slice(-5);
+      for (let i = lastLines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lastLines[i]);
+          if (entry.message?.timestamp) {
+            lastSyncTimestamp = entry.message.timestamp;
+            console.log(`📡 Sync initialized from timestamp: ${new Date(lastSyncTimestamp).toISOString()}`);
+            break;
+          }
+        } catch {}
+      }
+      return; // Skip first poll to avoid re-syncing recent messages
+    }
+    
     // Check last 10 entries for new messages
     const recentLines = lines.slice(-10);
     
@@ -822,6 +949,20 @@ async function pollForSync() {
         if (msgTimestamp <= lastSyncTimestamp) continue;
         if (msgId && msgId === lastSyncedMessageId) continue;
         
+        // ONLY sync user and assistant messages - skip toolResult, toolCall, thinking, etc.
+        if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+        
+        // For assistant messages, check if it's a pure text response (not tool calls/thinking)
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          // Check if content contains toolCall or thinking blocks
+          const hasToolCall = msg.content.some(c => c.type === 'toolCall' || c.type === 'tool_use');
+          const hasThinking = msg.content.some(c => c.type === 'thinking');
+          // Skip if this is a tool-use turn (not a final response)
+          if (hasToolCall) continue;
+          // If it's ONLY thinking with no text, skip
+          if (hasThinking && !msg.content.some(c => c.type === 'text')) continue;
+        }
+        
         const text = typeof msg.content === 'string' ? msg.content :
                     (Array.isArray(msg.content) ? msg.content.find(c => c.type === 'text')?.text : null);
         
@@ -835,7 +976,7 @@ async function pollForSync() {
         if (text.includes('HEARTBEAT') || text.includes('Read HEARTBEAT.md')) continue;
         
         // Clean up text for display
-        const cleanText = text
+        let cleanText = text
           .replace(/^\[WhatsApp[^\]]*\]\s*/g, '')
           .replace(/\n?\[message_id:[^\]]+\]/g, '')
           .replace(/^\[Spark Web\]\s*/g, '')
@@ -852,7 +993,15 @@ async function pollForSync() {
         const isSparkWeb = text.includes('[Spark Web]');
         const source = isWhatsApp ? 'whatsapp' : (isSparkWeb ? 'web' : 'other');
         
-        // Broadcast to all portal clients
+        // Skip portal-originated messages (user already sees them locally)
+        // Assistant responses to portal are handled by hash check above (recentlySentHashes)
+        if (isSparkWeb) {
+          lastSyncTimestamp = msgTimestamp;
+          if (msgId) lastSyncedMessageId = msgId;
+          continue;
+        }
+        
+        // Broadcast to portal clients (WhatsApp messages + responses to them)
         const syncPayload = JSON.stringify({
           type: 'sync',
           message: {
@@ -865,6 +1014,12 @@ async function pollForSync() {
         
         for (const client of portalClients) {
           if (client.readyState === 1) { // WebSocket.OPEN
+            // Skip assistant messages for clients waiting for CLI response
+            // They'll get the response directly from CLI
+            if (msg.role === 'assistant' && processingClients.has(client)) {
+              console.log(`📡 Skipping sync to processing client`);
+              continue;
+            }
             try {
               client.send(syncPayload);
             } catch (e) {
@@ -947,9 +1102,9 @@ if (UNIFIED_SESSION) {
   // Primary: file watching (instant sync)
   startFileWatcher();
   
-  // Backup: poll every 5s in case file watching misses something
-  setInterval(pollForSync, 5000);
-  console.log('📡 Real-time sync: file watching + 5s backup poll');
+  // Backup: poll every 1s - file watching is unreliable on Linux
+  setInterval(pollForSync, 1000);
+  console.log('📡 Real-time sync: file watching + 1s backup poll');
 }
 
 // WebSocket heartbeat to detect dead connections
@@ -1193,9 +1348,13 @@ async function extractDocxText(dataUrl) {
 
 // Route special commands through Clawdbot's main session (for tools/skills)
 // Uses the CLI for reliable agent execution with full tool access
-async function routeThroughClawdbot(ws, sessionId, text) {
-  console.log(`🔀 [${sessionId}] Routing through Clawdbot: ${text.slice(0, 50)}...`);
+// isRetry: true if this is a retry from the queue (don't re-queue on failure)
+async function routeThroughClawdbot(ws, sessionId, text, isRetry = false) {
+  console.log(`🔀 [${sessionId}] Routing through Clawdbot: ${text.slice(0, 50)}...${isRetry ? ' (retry)' : ''}`);
   sendToClient(sessionId, { type: 'thinking' });
+  
+  // Mark this client as processing - sync will skip assistant msgs for them
+  if (ws) processingClients.add(ws);
   
   return new Promise((resolve) => {
     const timeout = 5 * 60 * 1000; // 5 minutes timeout
@@ -1229,6 +1388,9 @@ async function routeThroughClawdbot(ws, sessionId, text) {
         console.error(`[${sessionId}] Clawdbot routing timeout after 5 minutes`);
         sendToClient(sessionId, { type: 'error', message: 'Request timed out after 5 minutes' });
         sendToClient(sessionId, { type: 'done' });
+        // Unmark client as processing
+        const session = sessions.get(sessionId);
+        if (session?.ws) processingClients.delete(session.ws);
         resolve(false);
       }
     }, timeout);
@@ -1240,7 +1402,31 @@ async function routeThroughClawdbot(ws, sessionId, text) {
       
       try {
         if (code !== 0) {
-          throw new Error(`CLI exited with code ${code}: ${stderr.slice(0, 200)}`);
+          const errorText = stderr || stdout || '';
+          
+          // Check if this is a "connecting" error - queue message for retry
+          if (!isRetry && isConnectingError(errorText)) {
+            console.log(`⏳ [${sessionId}] Gateway connecting, queueing message...`);
+            gatewayConnecting = true;
+            
+            // Notify user their message is queued
+            sendToClient(sessionId, { 
+              type: 'text', 
+              content: '⏳ WhatsApp is reconnecting... Your message has been queued and will be sent automatically when connected.' 
+            });
+            sendToClient(sessionId, { type: 'done' });
+            
+            // Queue the message
+            queueMessage(ws, sessionId, text, resolve);
+            startQueueDrainTimer();
+            
+            // Unmark client as processing (will be re-marked on retry)
+            const sessionQueue = sessions.get(sessionId);
+            if (sessionQueue?.ws) processingClients.delete(sessionQueue.ws);
+            return;
+          }
+          
+          throw new Error(`CLI exited with code ${code}: ${errorText.slice(0, 200)}`);
         }
         
         // Parse JSON output from CLI
@@ -1252,6 +1438,15 @@ async function routeThroughClawdbot(ws, sessionId, text) {
         console.log(`✅ [${sessionId}] Clawdbot response: ${reply.slice(0, 100)}...`);
         sendToClient(sessionId, { type: 'text', content: reply });
         sendToClient(sessionId, { type: 'done' });
+        
+        // Add to hash set so sync won't re-broadcast this response
+        const replyHash = hashMessage(reply);
+        recentlySentHashes.add(replyHash);
+        
+        // Unmark client as processing
+        const session = sessions.get(sessionId);
+        if (session?.ws) processingClients.delete(session.ws);
+        
         resolve(true);
       } catch (e) {
         console.error(`[${sessionId}] Clawdbot routing error:`, e.message);
@@ -1261,6 +1456,9 @@ async function routeThroughClawdbot(ws, sessionId, text) {
           : e.message;
         sendToClient(sessionId, { type: 'error', message: errorMsg });
         sendToClient(sessionId, { type: 'done' });
+        // Unmark client as processing
+        const sessionErr = sessions.get(sessionId);
+        if (sessionErr?.ws) processingClients.delete(sessionErr.ws);
         resolve(false);
       }
     });
@@ -1273,47 +1471,98 @@ async function routeThroughClawdbot(ws, sessionId, text) {
       console.error(`[${sessionId}] Clawdbot spawn error:`, e.message);
       sendToClient(sessionId, { type: 'error', message: `Failed to run Clawdbot: ${e.message}` });
       sendToClient(sessionId, { type: 'done' });
+      // Unmark client as processing
+      const sessionSpawn = sessions.get(sessionId);
+      if (sessionSpawn?.ws) processingClients.delete(sessionSpawn.ws);
       resolve(false);
     });
   });
 }
 
 // Handle text/voice transcript (with optional image or file)
-// Processing continues even if client disconnects
+// ALL messages route through Clawdbot main session for unified experience
 async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData) {
   if (!text?.trim()) return;
   
   const sessionId = ws.sessionId;
-  
-  // Route special commands through Clawdbot main session (for tools/skills)
-  const specialPrefixes = ['/plan', 'plan:', '/research', 'RESEARCH REQUEST', 'DEV TEAM'];
-  if (specialPrefixes.some(p => text.toLowerCase().startsWith(p.toLowerCase()))) {
-    await routeThroughClawdbot(ws, sessionId, text);
-    return;
-  }
-  
   const hasImage = !!imageDataUrl;
-  // Use Sonnet for images (faster), Opus for text-only chat
-  const model = hasImage ? 'claude-sonnet-4-20250514' : (MODELS[mode] || MODELS.chat);
   const hasFile = !!fileData;
+  
   console.log(`🎤 [${sessionId}] (${mode}) User: ${text.slice(0, 50)}...${hasImage ? ' [+image]' : ''}${hasFile ? ` [+${fileData.filename}]` : ''}`);
   
-  // Mark request as pending - processing will continue even if client disconnects
-  // Uses queue to handle multiple rapid requests without overwriting
-  const requestId = addPendingRequest(sessionId, text);
+  // Build the full message text
+  let fullText = text;
   
+  // Handle file attachments - extract text and include in message
+  if (fileData) {
+    try {
+      const ext = fileData.filename.split('.').pop().toLowerCase();
+      let extractedText = '';
+      
+      if (ext === 'pdf') {
+        console.log(`📄 [${sessionId}] Extracting PDF: ${fileData.filename}`);
+        extractedText = await extractPdfText(fileData.dataUrl);
+      } else if (ext === 'docx' || ext === 'doc') {
+        console.log(`📝 [${sessionId}] Extracting DOCX: ${fileData.filename}`);
+        extractedText = await extractDocxText(fileData.dataUrl);
+      }
+      
+      // Truncate if too long (keep first 30k chars for CLI)
+      if (extractedText.length > 30000) {
+        extractedText = extractedText.slice(0, 30000) + '\n\n[... truncated ...]';
+      }
+      
+      fullText = `${text}\n\n[File: ${fileData.filename}]\n\n${extractedText}`;
+    } catch (e) {
+      console.error(`[${sessionId}] File extraction error:`, e.message);
+      sendToClient(sessionId, { type: 'error', message: `Failed to read file: ${e.message}` });
+      sendToClient(sessionId, { type: 'done' });
+      return;
+    }
+  }
+  
+  // Handle images - save to temp file and reference in message
+  if (hasImage) {
+    try {
+      const imgDir = '/tmp/spark-images';
+      if (!existsSync(imgDir)) mkdirSync(imgDir, { recursive: true });
+      
+      const imgFilename = `img_${Date.now()}.jpg`;
+      const imgPath = join(imgDir, imgFilename);
+      const base64Data = imageDataUrl.replace(/^data:[^;]+;base64,/, '');
+      writeFileSync(imgPath, Buffer.from(base64Data, 'base64'));
+      
+      fullText = `[Image attached: ${imgPath}]\n\n${text}`;
+      console.log(`📷 [${sessionId}] Image saved: ${imgPath}`);
+    } catch (e) {
+      console.error(`[${sessionId}] Image save error:`, e.message);
+      // Continue without image
+    }
+  }
+  
+  // Route ALL messages through Clawdbot main session
+  // This ensures same session, same tools, same memory as WhatsApp
+  await routeThroughClawdbot(ws, sessionId, fullText);
+}
+
+// Legacy handler kept for reference - no longer used
+async function handleTranscriptIsolated(ws, session, text, mode, imageDataUrl, fileData) {
+  if (!text?.trim()) return;
+  
+  const sessionId = ws.sessionId;
+  const hasImage = !!imageDataUrl;
+  const model = hasImage ? 'claude-sonnet-4-20250514' : (MODELS[mode] || MODELS.chat);
+  const hasFile = !!fileData;
+  
+  const requestId = addPendingRequest(sessionId, text);
   sendToClient(sessionId, { type: 'thinking' });
   
-  // Load shared history from main Clawdbot session
   const sharedHistory = loadSessionHistory(20);
-  
-  // Build content - handle images, PDFs, and docs
   let userContent = text;
   let fullText = text;
   
   try {
     if (imageDataUrl) {
-      // Image - use Anthropic format for Claude models
       userContent = [
         { type: 'text', text: text },
         { 
@@ -1326,29 +1575,15 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
         }
       ];
     } else if (fileData) {
-      // PDF or DOCX - extract text
       const ext = fileData.filename.split('.').pop().toLowerCase();
       let extractedText = '';
       
       if (ext === 'pdf') {
-        console.log(`📄 [${sessionId}] Extracting PDF: ${fileData.filename}`);
-        try {
-          extractedText = await extractPdfText(fileData.dataUrl);
-        } catch (pdfError) {
-          console.error(`PDF extraction error:`, pdfError);
-          throw new Error(`Could not read PDF: ${pdfError.message.includes('Invalid') ? 'File appears corrupted' : pdfError.message}`);
-        }
+        extractedText = await extractPdfText(fileData.dataUrl);
       } else if (ext === 'docx' || ext === 'doc') {
-        console.log(`📝 [${sessionId}] Extracting DOCX: ${fileData.filename}`);
-        try {
-          extractedText = await extractDocxText(fileData.dataUrl);
-        } catch (docxError) {
-          console.error(`DOCX extraction error:`, docxError);
-          throw new Error(`Could not read DOCX: ${docxError.message.includes('Invalid') ? 'File appears corrupted' : docxError.message}`);
-        }
+        extractedText = await extractDocxText(fileData.dataUrl);
       }
       
-      // Truncate if too long (keep first 50k chars)
       if (extractedText.length > 50000) {
         extractedText = extractedText.slice(0, 50000) + '\n\n[... truncated ...]';
       }
@@ -1357,71 +1592,29 @@ async function handleTranscript(ws, session, text, mode, imageDataUrl, fileData)
       userContent = fullText;
     }
   } catch (e) {
-    console.error(`[${sessionId}] File extraction error:`, e.message);
     updatePendingRequest(sessionId, requestId, { status: 'error', error: `Failed to read file: ${e.message}` });
     sendToClient(sessionId, { type: 'error', message: `Failed to read file: ${e.message}` });
     sendToClient(sessionId, { type: 'done' });
     return;
   }
   
-  // Add current message to history for this request
   sharedHistory.push({ role: 'user', content: userContent });
-  
-  // Append user message to shared session file (text only, not full base64)
   appendToSessionSync('user', typeof userContent === 'string' ? userContent.slice(0, 2000) : text);
   
-  // Get response - use unified session (gateway) or isolated mode
-  const startTime = Date.now();
   let response;
-  
-  // Try unified session first if enabled (routes through WhatsApp context)
-  if (UNIFIED_SESSION && !hasImage) {
-    console.log(`🔗 [${sessionId}] Routing through unified session...`);
-    try {
-      const result = await sendToMainSession(
-        typeof userContent === 'string' ? userContent : text,
-        'Spark Portal'
-      );
-      
-      if (result && result.response) {
-        response = result.response;
-        console.log(`🧠 [${sessionId}] Unified response (${Date.now() - startTime}ms): ${response.slice(0, 50)}...`);
-      } else if (result && result.payloads) {
-        // Handle array of payloads
-        response = result.payloads.map(p => p.text).filter(Boolean).join('\n');
-        console.log(`🧠 [${sessionId}] Unified response from payloads (${Date.now() - startTime}ms): ${response.slice(0, 50)}...`);
-      } else {
-        throw new Error('No response from gateway');
-      }
-    } catch (e) {
-      console.warn(`[${sessionId}] Unified session failed, falling back to isolated:`, e.message);
-      // Fall through to isolated mode
-      response = null;
-    }
+  try {
+    response = await chat(sharedHistory, model, mode, hasImage);
+    appendToSessionSync('assistant', response);
+  } catch (e) {
+    updatePendingRequest(sessionId, requestId, { status: 'error', error: `API error: ${e.message}` });
+    sendToClient(sessionId, { type: 'error', message: `API error: ${e.message}` });
+    sendToClient(sessionId, { type: 'done' });
+    return;
   }
   
-  // Fallback to isolated mode if unified didn't work or not enabled
-  if (!response) {
-    try {
-      response = await chat(sharedHistory, model, mode, hasImage);
-      console.log(`🧠 [${sessionId}] Isolated response (${Date.now() - startTime}ms): ${response.slice(0, 50)}...`);
-      
-      // Append to session file in isolated mode
-      appendToSessionSync('assistant', response);
-    } catch (e) {
-      console.error(`[${sessionId}] Chat error:`, e.message);
-      updatePendingRequest(sessionId, requestId, { status: 'error', error: `API error: ${e.message}` });
-      sendToClient(sessionId, { type: 'error', message: `API error: ${e.message}` });
-      sendToClient(sessionId, { type: 'done' });
-      return;
-    }
-  }
-  
-  // Store response and try to send to client
   const sent = sendToClient(sessionId, { type: 'text', content: response });
   
   if (sent) {
-    // Client connected - send response directly
     if (mode === 'voice') {
       try {
         const audio = await tts.synthesize(response);
