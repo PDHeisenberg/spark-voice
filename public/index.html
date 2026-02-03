@@ -1964,6 +1964,227 @@
       background: var(--green);
       border-radius: 50%;
     }
+    
+    /* ============================================================
+       SESSION PAGE - Full-screen session interface
+       ============================================================ */
+    #session-page {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 100;
+      flex-direction: column;
+    }
+    
+    #session-page.show {
+      display: flex;
+    }
+    
+    .session-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      padding-top: max(16px, env(safe-area-inset-top, 0px));
+      border-bottom: 1px solid var(--glass-border);
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    
+    .session-back-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: var(--input-bg);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    
+    .session-back-btn svg {
+      width: 20px;
+      height: 20px;
+      stroke: var(--text-secondary);
+      stroke-width: 2;
+      fill: none;
+    }
+    
+    .session-back-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .session-header-info {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .session-header-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .session-header-title .session-icon {
+      font-size: 20px;
+    }
+    
+    .session-header-status {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    
+    .session-header-status.active {
+      color: var(--green);
+    }
+    
+    .session-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      padding-bottom: 100px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .session-messages .msg {
+      max-width: 85%;
+      padding: 14px 18px;
+      border-radius: 22px;
+      font-size: 16px;
+      line-height: 1.5;
+      word-wrap: break-word;
+    }
+    
+    .session-messages .msg.user {
+      align-self: flex-end;
+      background: var(--msg-user);
+      color: white;
+    }
+    
+    .session-messages .msg.bot {
+      align-self: flex-start;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      white-space: pre-wrap;
+    }
+    
+    .session-empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    
+    .session-empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.7;
+    }
+    
+    .session-empty-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    
+    .session-empty-desc {
+      font-size: 15px;
+      color: var(--text-secondary);
+      max-width: 280px;
+    }
+    
+    .session-input-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 8px));
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--glass-border);
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      z-index: 101;
+    }
+    
+    .session-input {
+      flex: 1;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 24px;
+      padding: 12px 18px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--text);
+      resize: none;
+      min-height: 48px;
+      max-height: 120px;
+      outline: none;
+    }
+    
+    .session-input:focus {
+      border-color: var(--accent);
+    }
+    
+    .session-input::placeholder {
+      color: var(--text-tertiary);
+    }
+    
+    .session-send-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    
+    .session-send-btn.active {
+      opacity: 1;
+    }
+    
+    .session-send-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .session-send-btn svg {
+      width: 22px;
+      height: 22px;
+      stroke: white;
+      stroke-width: 2;
+      fill: none;
+    }
+    
+    /* Session thinking indicator */
+    .session-messages .msg.thinking {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 18px 24px;
+    }
   </style>
 </head>
 <body>
@@ -2221,6 +2442,35 @@
   </div>
 
   <div id="toast"></div>
+
+  <!-- Session Page - Full-screen mode session interface -->
+  <div id="session-page">
+    <div class="session-header">
+      <button class="session-back-btn" id="session-back-btn" aria-label="Back">
+        <svg viewBox="0 0 24 24">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <div class="session-header-info">
+        <div class="session-header-title">
+          <span class="session-icon" id="session-icon">👨‍💻</span>
+          <span id="session-title">Dev Mode</span>
+        </div>
+        <div class="session-header-status" id="session-status">Session</div>
+      </div>
+    </div>
+    <div class="session-messages" id="session-messages">
+      <!-- Messages appear here -->
+    </div>
+    <div class="session-input-bar">
+      <textarea class="session-input" id="session-input" placeholder="Type a message..." rows="1"></textarea>
+      <button class="session-send-btn" id="session-send-btn" aria-label="Send">
+        <svg viewBox="0 0 24 24">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 
   <!-- Message context menu -->
   <div id="msg-menu">

@@ -1873,19 +1873,35 @@ function handle(data) {
     case 'thinking':
       // Server acknowledged request and is processing
       console.log('🤔 Server thinking...');
-      showThinking();
+      // Route to session page if active
+      if (currentSessionMode && sessionPage.classList.contains('show')) {
+        showSessionThinking();
+      } else {
+        showThinking();
+      }
       break;
     case 'text':
       console.log('✅ Text message received:', data.content?.slice?.(0, 100));
-      removeThinking();
-      setStatus('');
-      const lastSys = messagesEl?.querySelector('.msg.system:last-child');
-      if (lastSys?.textContent === 'Transcribing...') lastSys.remove();
-      if (data.content) {
-        addMsg(data.content, 'bot');
-        console.log('✅ Bot message added to DOM');
+      // Route to session page if active
+      if (currentSessionMode && sessionPage.classList.contains('show')) {
+        removeSessionThinking();
+        if (data.content) {
+          addSessionMessage('bot', data.content);
+          // Update session status
+          sessionStatus.textContent = '● Active';
+          sessionStatus.classList.add('active');
+        }
       } else {
-        console.warn('⚠️ Empty text content received');
+        removeThinking();
+        setStatus('');
+        const lastSys = messagesEl?.querySelector('.msg.system:last-child');
+        if (lastSys?.textContent === 'Transcribing...') lastSys.remove();
+        if (data.content) {
+          addMsg(data.content, 'bot');
+          console.log('✅ Bot message added to DOM');
+        } else {
+          console.warn('⚠️ Empty text content received');
+        }
       }
       break;
     case 'transcription':
@@ -1896,14 +1912,23 @@ function handle(data) {
     case 'audio': playAudio(data.data); break;
     case 'done':
       isProcessing = false;
+      sessionPageProcessing = false;
       setStatus('');
       updateSparkPillText();
       fetchActiveSessions(); // Refresh sessions after response
+      checkActiveSubagentSessions(); // Refresh mode button states
       refreshHistoryCache(); // Keep history cache up to date
       if (mode === 'voice' && !isListening) startVoice();
       break;
     case 'error':
-      removeThinking();
+      // Route to session page if active
+      if (currentSessionMode && sessionPage.classList.contains('show')) {
+        removeSessionThinking();
+        addSessionMessage('bot', `Error: ${data.message || 'Something went wrong'}`);
+        sessionPageProcessing = false;
+      } else {
+        removeThinking();
+      }
       toast(data.message || 'Error', true);
       isProcessing = false;
       setStatus('');
@@ -2192,16 +2217,26 @@ document.getElementById('articulations-btn')?.addEventListener('click', async ()
 
 // Track active subagent sessions by mode
 const activeSubagentSessions = {
-  'dev-mode': null,
-  'research-mode': null,
-  'plan-mode': null
+  'spark-dev-mode': null,
+  'spark-research-mode': null,
+  'spark-plan-mode': null,
+  'spark-videogen-mode': null
 };
 
 // Map button IDs to session labels
 const buttonToSessionLabel = {
-  'devteam-btn': 'dev-mode',
-  'researcher-btn': 'research-mode',
-  'plan-btn': 'plan-mode'
+  'devteam-btn': 'spark-dev-mode',
+  'researcher-btn': 'spark-research-mode',
+  'plan-btn': 'spark-plan-mode',
+  'videogen-btn': 'spark-videogen-mode'
+};
+
+// Map mode names to session labels
+const modeToSessionLabel = {
+  'dev': 'spark-dev-mode',
+  'research': 'spark-research-mode',
+  'plan': 'spark-plan-mode',
+  'video': 'spark-videogen-mode'
 };
 
 // Check for active subagent sessions
@@ -2211,18 +2246,22 @@ async function checkActiveSubagentSessions() {
     const data = await response.json();
     
     // Reset all to null
-    activeSubagentSessions['dev-mode'] = null;
-    activeSubagentSessions['research-mode'] = null;
-    activeSubagentSessions['plan-mode'] = null;
+    activeSubagentSessions['spark-dev-mode'] = null;
+    activeSubagentSessions['spark-research-mode'] = null;
+    activeSubagentSessions['spark-plan-mode'] = null;
+    activeSubagentSessions['spark-videogen-mode'] = null;
     
     // Find matching subagent sessions
     for (const session of (data.sessions || [])) {
-      if (session.label === 'dev-mode' || session.key?.includes('dev-mode')) {
-        activeSubagentSessions['dev-mode'] = session;
-      } else if (session.label === 'research-mode' || session.key?.includes('research-mode')) {
-        activeSubagentSessions['research-mode'] = session;
-      } else if (session.label === 'plan-mode' || session.key?.includes('plan-mode')) {
-        activeSubagentSessions['plan-mode'] = session;
+      const label = session.label || '';
+      if (label.includes('dev-mode') || session.key?.includes('dev-mode')) {
+        activeSubagentSessions['spark-dev-mode'] = session;
+      } else if (label.includes('research-mode') || session.key?.includes('research-mode')) {
+        activeSubagentSessions['spark-research-mode'] = session;
+      } else if (label.includes('plan-mode') || session.key?.includes('plan-mode')) {
+        activeSubagentSessions['spark-plan-mode'] = session;
+      } else if (label.includes('videogen-mode') || session.key?.includes('videogen-mode')) {
+        activeSubagentSessions['spark-videogen-mode'] = session;
       }
     }
     
@@ -2258,8 +2297,246 @@ function updateSubagentButtonStates() {
 
 // Get active session for a mode
 function getActiveSession(mode) {
-  return activeSubagentSessions[mode];
+  const label = modeToSessionLabel[mode] || mode;
+  return activeSubagentSessions[label];
 }
+
+// ============================================================================
+// SESSION PAGE - Full-screen mode session interface
+// ============================================================================
+
+const sessionPage = document.getElementById('session-page');
+const sessionMessagesEl = document.getElementById('session-messages');
+const sessionInput = document.getElementById('session-input');
+const sessionSendBtn = document.getElementById('session-send-btn');
+const sessionBackBtn = document.getElementById('session-back-btn');
+const sessionIcon = document.getElementById('session-icon');
+const sessionTitle = document.getElementById('session-title');
+const sessionStatus = document.getElementById('session-status');
+
+let currentSessionMode = null; // 'dev', 'research', 'plan', 'video'
+let sessionPageProcessing = false;
+
+// Mode configurations for session page
+const SESSION_MODE_CONFIG = {
+  dev: {
+    name: 'Dev Mode',
+    icon: '👨‍💻',
+    sessionKey: 'spark-dev-mode',
+    placeholder: 'Describe what you want to build or fix...',
+    emptyTitle: 'Dev Mode',
+    emptyDesc: 'Start a coding session. Describe what you want to build or fix.'
+  },
+  research: {
+    name: 'Research Mode',
+    icon: '🔬',
+    sessionKey: 'spark-research-mode',
+    placeholder: 'What would you like to research?',
+    emptyTitle: 'Research Mode',
+    emptyDesc: 'Start a deep research session. Ask about any topic.'
+  },
+  plan: {
+    name: 'Plan Mode',
+    icon: '📋',
+    sessionKey: 'spark-plan-mode',
+    placeholder: 'What do you want to plan?',
+    emptyTitle: 'Plan Mode',
+    emptyDesc: 'Start planning. Describe your project or feature.'
+  },
+  video: {
+    name: 'Video Gen',
+    icon: '🎬',
+    sessionKey: 'spark-videogen-mode',
+    placeholder: 'Describe the video you want to create...',
+    emptyTitle: 'Video Gen',
+    emptyDesc: 'Generate AI videos. Describe what you want to create.'
+  }
+};
+
+// Show session page for a specific mode
+async function showSessionPage(mode) {
+  const config = SESSION_MODE_CONFIG[mode];
+  if (!config) {
+    console.error('Unknown session mode:', mode);
+    return;
+  }
+  
+  currentSessionMode = mode;
+  
+  // Update header
+  sessionIcon.textContent = config.icon;
+  sessionTitle.textContent = config.name;
+  sessionInput.placeholder = config.placeholder;
+  
+  // Check if session is active
+  const activeSession = getActiveSession(mode);
+  if (activeSession) {
+    sessionStatus.textContent = '● Active';
+    sessionStatus.classList.add('active');
+  } else {
+    sessionStatus.textContent = 'Session';
+    sessionStatus.classList.remove('active');
+  }
+  
+  // Clear messages
+  sessionMessagesEl.innerHTML = '';
+  
+  // Show session page
+  sessionPage.classList.add('show');
+  
+  // Load session history
+  await loadSessionHistory(mode, config);
+  
+  // Focus input
+  setTimeout(() => sessionInput.focus(), 100);
+}
+
+// Hide session page
+function hideSessionPage() {
+  sessionPage.classList.remove('show');
+  currentSessionMode = null;
+  sessionPageProcessing = false;
+}
+
+// Load session history from API
+async function loadSessionHistory(mode, config) {
+  try {
+    const res = await fetch(`/api/modes/${mode}/history?limit=50`);
+    const data = await res.json();
+    const messages = data.messages || [];
+    
+    if (messages.length === 0) {
+      // Show empty state
+      sessionMessagesEl.innerHTML = `
+        <div class="session-empty-state">
+          <div class="session-empty-icon">${config.icon}</div>
+          <div class="session-empty-title">${config.emptyTitle}</div>
+          <div class="session-empty-desc">${config.emptyDesc}</div>
+        </div>
+      `;
+    } else {
+      // Render messages
+      for (const msg of messages) {
+        const text = extractSessionMessageText(msg);
+        if (text) {
+          addSessionMessage(msg.role === 'assistant' ? 'bot' : 'user', text);
+        }
+      }
+      // Scroll to bottom
+      sessionMessagesEl.scrollTop = sessionMessagesEl.scrollHeight;
+    }
+  } catch (e) {
+    console.error('Failed to load session history:', e);
+    sessionMessagesEl.innerHTML = `
+      <div class="session-empty-state">
+        <div class="session-empty-icon">${config.icon}</div>
+        <div class="session-empty-title">${config.emptyTitle}</div>
+        <div class="session-empty-desc">${config.emptyDesc}</div>
+      </div>
+    `;
+  }
+}
+
+// Extract text from message content
+function extractSessionMessageText(msg) {
+  if (!msg?.content) return null;
+  if (typeof msg.content === 'string') return msg.content;
+  if (Array.isArray(msg.content)) {
+    const textPart = msg.content.find(c => c.type === 'text');
+    return textPart?.text || null;
+  }
+  return null;
+}
+
+// Add message to session page
+function addSessionMessage(type, text) {
+  // Remove empty state if present
+  const emptyState = sessionMessagesEl.querySelector('.session-empty-state');
+  if (emptyState) emptyState.remove();
+  
+  const el = document.createElement('div');
+  el.className = `msg ${type}`;
+  
+  if (type === 'bot') {
+    el.innerHTML = formatMessage(text);
+  } else {
+    el.textContent = text;
+  }
+  
+  sessionMessagesEl.appendChild(el);
+  sessionMessagesEl.scrollTop = sessionMessagesEl.scrollHeight;
+  return el;
+}
+
+// Show thinking indicator in session
+function showSessionThinking() {
+  // Remove existing thinking
+  removeSessionThinking();
+  
+  const el = document.createElement('div');
+  el.className = 'msg bot thinking';
+  el.id = 'session-thinking-indicator';
+  el.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+  sessionMessagesEl.appendChild(el);
+  sessionMessagesEl.scrollTop = sessionMessagesEl.scrollHeight;
+}
+
+// Remove thinking indicator from session
+function removeSessionThinking() {
+  document.getElementById('session-thinking-indicator')?.remove();
+}
+
+// Send message in session page
+async function sendSessionMessage() {
+  const text = sessionInput.value.trim();
+  if (!text || sessionPageProcessing) return;
+  
+  sessionInput.value = '';
+  sessionInput.style.height = 'auto';
+  sessionSendBtn.classList.remove('active');
+  
+  sessionPageProcessing = true;
+  
+  // Add user message
+  addSessionMessage('user', text);
+  
+  // Show thinking
+  showSessionThinking();
+  
+  // Send via WebSocket
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'mode_message',
+      sparkMode: currentSessionMode,
+      text: text
+    }));
+  } else {
+    removeSessionThinking();
+    addSessionMessage('bot', 'Not connected. Please try again.');
+    sessionPageProcessing = false;
+  }
+}
+
+// Session input handlers
+sessionInput?.addEventListener('input', () => {
+  const hasText = sessionInput.value.trim().length > 0;
+  sessionSendBtn?.classList.toggle('active', hasText);
+  
+  // Auto-resize
+  sessionInput.style.height = 'auto';
+  sessionInput.style.height = Math.min(sessionInput.scrollHeight, 120) + 'px';
+});
+
+sessionInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendSessionMessage();
+  }
+});
+
+sessionSendBtn?.addEventListener('click', sendSessionMessage);
+
+sessionBackBtn?.addEventListener('click', hideSessionPage);
 
 // Check on load and every 10 seconds
 checkActiveSubagentSessions();
@@ -2484,81 +2761,24 @@ function viewActiveSession(session) {
   send(`Show me the recent activity from the ${session.label || 'subagent'} session (key: ${session.key})`, 'chat');
 }
 
-// Dev Mode button - enters dedicated dev session
+// Dev Mode button - navigate to session page
 document.getElementById('devteam-btn')?.addEventListener('click', () => {
-  showDevModeModal();
+  showSessionPage('dev');
 });
 
-function showDevModeModal() {
-  const activeSession = getActiveSession('dev-mode');
-  createBottomSheet({
-    icon: '👨‍💻',
-    title: 'Dev Mode',
-    subtitle: activeSession ? '● Session active' : 'Isolated coding session',
-    placeholder: 'Describe the task or issues to fix...',
-    submitText: activeSession ? 'Continue Session' : 'Start Dev Mode',
-    activeSession,
-    onViewSession: () => enterMode('dev'), // View existing session
-    onSubmit: async (task) => {
-      await enterMode('dev');
-      if (task.trim()) {
-        send(task, 'chat'); // Will route to dev mode session
-      }
-    }
-  });
-}
-
-// Research Mode button - enters dedicated research session
+// Research Mode button - navigate to session page
 document.getElementById('researcher-btn')?.addEventListener('click', () => {
-  showResearchModeModal();
+  showSessionPage('research');
 });
 
-function showResearchModeModal() {
-  const activeSession = getActiveSession('research-mode');
-  createBottomSheet({
-    icon: '🔬',
-    title: 'Research Mode',
-    subtitle: activeSession ? '● Session active' : 'Deep research session',
-    placeholder: 'What would you like me to research?',
-    submitText: activeSession ? 'Continue Session' : 'Start Research',
-    activeSession,
-    onViewSession: () => enterMode('research'),
-    onSubmit: async (topic) => {
-      await enterMode('research');
-      if (topic.trim()) {
-        send(topic, 'chat');
-      }
-    }
-  });
-}
-
-// Plan Mode button - enters dedicated planning session
+// Plan Mode button - navigate to session page
 document.getElementById('plan-btn')?.addEventListener('click', () => {
-  showPlanModeModal();
+  showSessionPage('plan');
 });
 
-function showPlanModeModal() {
-  const activeSession = getActiveSession('plan-mode');
-  createBottomSheet({
-    icon: '📋',
-    title: 'Plan Mode',
-    subtitle: activeSession ? '● Session active' : 'Create detailed specs',
-    placeholder: 'What do you want to build?',
-    submitText: activeSession ? 'Continue Session' : 'Start Planning',
-    activeSession,
-    onViewSession: () => enterMode('plan'),
-    onSubmit: async (topic) => {
-      await enterMode('plan');
-      if (topic.trim()) {
-        send(topic, 'chat');
-      }
-    }
-  });
-}
-
-// Video Gen button
+// Video Gen button - navigate to session page
 document.getElementById('videogen-btn')?.addEventListener('click', () => {
-  showVideoGenModal();
+  showSessionPage('video');
 });
 
 /**
