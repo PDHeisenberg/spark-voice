@@ -2236,7 +2236,7 @@ const modeToSessionLabel = {
   'dev': 'spark-dev-mode',
   'research': 'spark-research-mode',
   'plan': 'spark-plan-mode',
-  'video': 'spark-videogen-mode'
+  'videogen': 'spark-videogen-mode'
 };
 
 // Check for active subagent sessions
@@ -2343,7 +2343,7 @@ const SESSION_MODE_CONFIG = {
     emptyTitle: 'Plan Mode',
     emptyDesc: 'Start planning. Describe your project or feature.'
   },
-  video: {
+  videogen: {
     name: 'Video Gen',
     icon: '🎬',
     sessionKey: 'spark-videogen-mode',
@@ -2778,7 +2778,7 @@ document.getElementById('plan-btn')?.addEventListener('click', () => {
 
 // Video Gen button - navigate to session page
 document.getElementById('videogen-btn')?.addEventListener('click', () => {
-  showSessionPage('video');
+  showSessionPage('videogen');
 });
 
 /**
