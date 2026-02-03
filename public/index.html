@@ -1870,6 +1870,100 @@
       stroke-width: 2;
       fill: none;
     }
+    
+    /* ============================================================
+       MODE INDICATOR - Shows current mode session
+       ============================================================ */
+    .mode-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: var(--input-bg);
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      padding: 6px 12px;
+      margin-left: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      animation: mode-appear 0.3s ease;
+    }
+    
+    @keyframes mode-appear {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    
+    .mode-icon {
+      font-size: 16px;
+    }
+    
+    .mode-name {
+      color: var(--accent);
+    }
+    
+    .mode-exit-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 2px 4px;
+      margin-left: 4px;
+      font-size: 14px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    
+    .mode-exit-btn:hover {
+      opacity: 1;
+      color: var(--red);
+    }
+    
+    /* Mode empty state */
+    .mode-empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+    
+    .mode-empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    
+    .mode-empty-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    
+    .mode-empty-desc {
+      font-size: 14px;
+      opacity: 0.7;
+    }
+    
+    /* Active session badge on mode buttons */
+    .shortcut-btn.session-active {
+      border-color: var(--green);
+      box-shadow: 0 0 12px rgba(48, 209, 88, 0.3);
+    }
+    
+    .shortcut-btn.session-active::after {
+      content: '';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+    }
   </style>
 </head>
 <body>
@@ -1942,28 +2036,28 @@
                 <svg class="shortcut-icon" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
                 <div class="shortcut-content">
                   <span class="shortcut-title">Dev Mode</span>
-                  <span class="shortcut-sub">Isolated coding sessions</span>
+                  <span class="shortcut-sub">Coding sessions</span>
                 </div>
               </button>
               <button class="shortcut" id="researcher-btn" aria-label="Start research mode">
                 <svg class="shortcut-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                 <div class="shortcut-content">
                   <span class="shortcut-title">Research Mode</span>
-                  <span class="shortcut-sub">Deep research subagent</span>
+                  <span class="shortcut-sub">Deep research</span>
                 </div>
               </button>
               <button class="shortcut" id="plan-btn" aria-label="Start plan mode">
                 <svg class="shortcut-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
                 <div class="shortcut-content">
                   <span class="shortcut-title">Plan Mode</span>
-                  <span class="shortcut-sub">Create detailed specs</span>
+                  <span class="shortcut-sub">Detailed specs</span>
                 </div>
               </button>
               <button class="shortcut" id="todays-reports-btn" aria-label="View daily reports">
                 <svg class="shortcut-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-3 3"/></svg>
                 <div class="shortcut-content">
                   <span class="shortcut-title">Daily Reports</span>
-                  <span class="shortcut-sub">Market updates & portfolio</span>
+                  <span class="shortcut-sub">Markets & portfolio</span>
                 </div>
               </button>
             </div>
@@ -1977,16 +2071,179 @@
                 <svg class="shortcut-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
                 <div class="shortcut-content">
                   <span class="shortcut-title">Video Gen</span>
-                  <span class="shortcut-sub">AI video from text or image</span>
+                  <span class="shortcut-sub">AI video creation</span>
                 </div>
               </button>
               <button class="shortcut" id="articulations-btn" aria-label="View articulations">
                 <svg class="shortcut-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 <div class="shortcut-content">
                   <span class="shortcut-title">Articulate</span>
-                  <span class="shortcut-sub">Refine your thinking & writing</span>
+                  <span class="shortcut-sub">Refine your writing</span>
                 </div>
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice mode content - scrolling transcript log -->
+    <div id="voice-content">
+      <!-- Messages will be appended here dynamically -->
+    </div>
+
+    <!-- Notes mode content -->
+    <div id="notes-content">
+      <div class="timer" id="notes-timer">0:00</div>
+      <div class="waveform">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+      <div class="status">Recording...</div>
+    </div>
+
+    <div id="status"></div>
+    <div id="timer">0:00</div>
+
+    <button id="clear-chat-btn" aria-label="Clear chat">Clear chat</button>
+    <button id="close-btn" aria-label="Close">Close</button>
+
+    <div id="bottom">
+      <!-- Voice button - circle -->
+      <button id="voice-btn" class="circle-btn" title="Voice" aria-label="Start voice conversation">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
+          <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+        </svg>
+      </button>
+
+      <!-- Center input bar -->
+      <div id="input-bar">
+        <button id="upload-btn" title="Attach file" aria-label="Attach file">
+          <svg viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.json,.csv">
+        <textarea id="text-input" placeholder="Talk to me" rows="1" aria-label="Message input"></textarea>
+        <button id="send-btn" aria-label="Send message">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Voice mode bar (shown when voice active) -->
+      <div id="voice-bar">
+        <div class="mic-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
+            <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+          </svg>
+        </div>
+        <div id="waveform">
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        </div>
+        <span class="listening-indicator" id="voice-status">Listening</span>
+      </div>
+
+      <!-- Close voice button - separate circle -->
+      <button id="close-voice-btn" title="Close" aria-label="Close voice conversation">
+        <svg viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
+      <!-- Notes mode: Close button -->
+      <button id="close-notes-btn" title="Save" aria-label="Save and close notes">
+        <svg viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
+      <!-- Notes mode: Delete button -->
+      <button id="delete-notes-btn" title="Discard" aria-label="Discard recording">
+        <svg viewBox="0 0 24 24">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+      </button>
+
+      <!-- Notes mode bar -->
+      <div id="notes-bar">
+        <div class="waveform-mini">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+        <div class="note-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <path d="M14 2v6h6"/>
+            <path d="M16 13H8"/>
+            <path d="M16 17H8"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Notes button - circle -->
+      <button id="notes-btn" class="circle-btn" title="Voice Note" aria-label="Record voice note">
+        <svg viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 2v6h6"/>
+          <path d="M16 13H8"/>
+          <path d="M16 17H8"/>
+        </svg>
+      </button>
+      
+      <!-- Close chat button - shown in chatfeed mode -->
+      <button id="close-chat-btn" class="circle-btn" aria-label="Close chat">
+        <svg viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- Message context menu -->
+  <div id="msg-menu">
+    <button class="menu-btn" id="menu-copy" title="Copy" aria-label="Copy message">
+      <svg viewBox="0 0 24 24">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+    </button>
+    <button class="menu-btn" id="menu-edit" title="Edit" aria-label="Edit message">
+      <svg viewBox="0 0 24 24">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+    </button>
+    <button class="menu-btn delete" id="menu-delete" title="Delete" aria-label="Delete message">
+      <svg viewBox="0 0 24 24">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+    </button>
+  </div>
+  <script type="module" src="app.js?v=122"></script>
+</body>
+</html>
 

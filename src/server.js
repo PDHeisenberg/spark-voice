@@ -836,6 +836,83 @@ app.get('/api/reports/today', async (req, res) => {
   }
 });
 
+// ============================================================================
+// MODE SESSIONS - Separate persistent sessions for each mode
+// ============================================================================
+import { MODE_CONFIG, sendToModeSession, getModeSessionHistory, getModeSessionStatus, getAllModeStatuses } from './mode-sessions.js';
+
+// Get all mode configurations
+app.get('/api/modes', (req, res) => {
+  const modes = {};
+  for (const [key, config] of Object.entries(MODE_CONFIG)) {
+    modes[key] = {
+      name: config.name,
+      icon: config.icon,
+      label: config.label,
+      notifyWhatsApp: config.notifyWhatsApp
+    };
+  }
+  res.json({ modes });
+});
+
+// Get status of all mode sessions
+app.get('/api/modes/status', async (req, res) => {
+  try {
+    const statuses = await getAllModeStatuses();
+    res.json({ statuses });
+  } catch (e) {
+    console.error('Mode status error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get status of a specific mode session
+app.get('/api/modes/:mode/status', async (req, res) => {
+  try {
+    const mode = req.params.mode;
+    const status = await getModeSessionStatus(mode);
+    res.json(status);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get history from a mode session
+app.get('/api/modes/:mode/history', async (req, res) => {
+  try {
+    const mode = req.params.mode;
+    const limit = parseInt(req.query.limit) || 50;
+    const messages = await getModeSessionHistory(mode, limit);
+    res.json({ messages });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Send message to a mode session (REST endpoint for simple sends)
+app.post('/api/modes/:mode/send', express.json(), async (req, res) => {
+  try {
+    const mode = req.params.mode;
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message required' });
+    }
+    
+    if (!MODE_CONFIG[mode]) {
+      return res.status(400).json({ error: `Unknown mode: ${mode}` });
+    }
+    
+    console.log(`📬 [${mode}] REST send: ${message.slice(0, 50)}...`);
+    
+    const result = await sendToModeSession(mode, message);
+    res.json(result);
+  } catch (e) {
+    console.error('Mode send error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // HTTP server
 const server = createServer(app);
 
@@ -1325,9 +1402,50 @@ async function handleMessage(ws, msg) {
       await handleVoiceNote(ws, session, msg.audio, msg.duration);
       break;
       
+    case 'mode_message':
+      // Route to mode-specific session
+      await handleModeMessage(ws, session, msg.sparkMode, msg.text);
+      break;
+      
+    case 'mode_history':
+      // Get history from mode session
+      await handleModeHistory(ws, msg.sparkMode);
+      break;
+      
     default:
       console.warn(`Unknown message: ${msg.type}`);
   }
+}
+
+// Handle message to mode-specific session
+async function handleModeMessage(ws, session, mode, text) {
+  if (!text?.trim()) return;
+  if (!MODE_CONFIG[mode]) {
+    sendToClient(ws.sessionId, { type: 'error', message: `Unknown mode: ${mode}` });
+    sendToClient(ws.sessionId, { type: 'done' });
+    return;
+  }
+  
+  const config = MODE_CONFIG[mode];
+  console.log(`📦 [${ws.sessionId}] Mode message (${config.name}): ${text.slice(0, 50)}...`);
+  
+  await sendToModeSession(mode, text, {
+    onThinking: () => sendToClient(ws.sessionId, { type: 'thinking' }),
+    onText: (reply) => sendToClient(ws.sessionId, { type: 'text', content: reply }),
+    onError: (error) => sendToClient(ws.sessionId, { type: 'error', message: error }),
+    onDone: () => sendToClient(ws.sessionId, { type: 'done' })
+  });
+}
+
+// Get history from mode session
+async function handleModeHistory(ws, mode) {
+  if (!MODE_CONFIG[mode]) {
+    ws.send(JSON.stringify({ type: 'mode_history', mode, messages: [], error: 'Unknown mode' }));
+    return;
+  }
+  
+  const messages = await getModeSessionHistory(mode, 50);
+  ws.send(JSON.stringify({ type: 'mode_history', mode, messages }));
 }
 
 // Extract text from PDF
