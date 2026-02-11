@@ -24,6 +24,7 @@ import { TTSProvider } from './providers/tts.js';
 import { loadConfig } from './config.js';
 import { handleRealtimeSession } from './realtime.js';
 import { handleHybridRealtimeSession } from './hybrid-realtime.js';
+import { handleElevenLabsSession } from './elevenlabs-realtime.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -864,6 +865,11 @@ server.on('upgrade', (request, socket, head) => {
         console.log('🎙️ Pure Realtime mode (GPT-4o end-to-end)');
         handleRealtimeSession(ws);
       }
+    });
+  } else if (pathname === '/elevenlabs-realtime' || pathname.endsWith('/elevenlabs-realtime')) {
+    wssRealtime.handleUpgrade(request, socket, head, (ws) => {
+      console.log('🎙️ ElevenLabs Conversational AI mode');
+      handleElevenLabsSession(ws, config);
     });
   } else {
     // Route everything else to existing handler (chat/notes)

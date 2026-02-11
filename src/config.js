@@ -63,6 +63,10 @@ export function loadConfig() {
       model: process.env.TTS_MODEL || 'eleven_turbo_v2_5',
     },
     
+    elevenlabs: {
+      agentId: process.env.ELEVENLABS_AGENT_ID || null,
+    },
+    
     stt: {
       provider: process.env.STT_PROVIDER || 'browser', // browser | deepgram | whisper
       apiKey: process.env.DEEPGRAM_API_KEY || loadAuthKey('deepgram'),
